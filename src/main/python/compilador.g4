@@ -91,7 +91,10 @@ ielse : ELSE instruccion
       |
       ;
 
-ifor : FOR PA initialize PYC test PYC step PC instruccion ;
+ifor : FOR PA initialize PYC test PYC step PC instruccion 
+     | FOR PA initialize PYC test PYC step PC PYC
+     ;
+
 initialize : expASIG
            |
            ;

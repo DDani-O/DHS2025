@@ -24,7 +24,9 @@ NOT      : '!' ;
 ASIG : '=' ;
 COMA : ',' ;
 SUMA : '+' ;
+INC : '++' ;
 RESTA : '-' ;
+DEC : '--' ;
 MULT : '*' ;
 DIV : '/' ;
 MOD : '%' ;
@@ -80,7 +82,7 @@ bloque : LLA instrucciones LLC ;
 // Declaración
 // Inicialización
 
-// Las llamadas a funciones se manejan como factores en las operaciones
+// Las llamadas a funciones también están presentes como factores en las operaciones
 
 // ======= Instrucciones de control =======
 
@@ -95,15 +97,24 @@ ifor : FOR PA initialize PYC test PYC step PC instruccion
      | FOR PA initialize PYC test PYC step PC PYC
      ;
 
-initialize : expASIG
+initialize : expASIG listInit
+           | tipo expASIG listInit
            |
-           ;
+           ; // Pueden ser tanto asignaciones como declaraciones
+listInit : COMA initialize
+         |
+         ;
+
 test : opal
      |
      ;
-step: exp
+
+step: exp listStep
      |
      ;
+listStep : COMA step
+         |
+         ;
 
 // ======= Declaraciones y asignación de variables =======
 
@@ -177,8 +188,10 @@ t : MULT factor t
   |
   ;
 
-factor : NUMERO
-       | ID
-       | PA exp PC
-       | // llamada a función
-       ;
+factor : (NOT | INC | DEC)? factorSufix; 
+factorSufix : factorCore (INC | DEC)? ;
+factorCore : NUMERO
+           | ID
+           | PA exp PC
+           | // llamada a función
+           ;

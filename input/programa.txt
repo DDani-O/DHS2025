@@ -1,10 +1,12 @@
 int x;
 int y, z;
-int a, b, c, d, e;
+int a, b = 2, c, d = 10, e;
 
 for (y = 0; y < 10; ++y) {
     x = 0;
 }
+
+for(;z > 25;);
 
 if (a) {
     x = a;

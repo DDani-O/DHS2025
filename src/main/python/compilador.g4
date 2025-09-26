@@ -149,7 +149,7 @@ a : AND expIGUALDAD a
   |
   ;
 
-expIGUALDAD: ; // Las igualdades pueden necesitar resolver alguna comparación primero
+expIGUALDAD: expCOMP i; // Las igualdades pueden necesitar resolver alguna comparación primero
 i : IGUAL expCOMP i
   | DISTINTO expCOMP i
   |

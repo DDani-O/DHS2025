@@ -1,0 +1,12 @@
+Sobre las reglas gramaticales vistas en clases
+construya las siguientes:
+
+a) return
+b) declaraciones
+    1) con asignación simple -> int x = 0;
+    2) como lista de variables -> int x, y, z;
+    3) como lista con asignaciones -> int x = 0, y, z = x;
+c) Instrucción compuesta (bloque)
+d) while - if (vistos en clases)
+e) for (completar)
+f) Funciones: Prototipos y Definición

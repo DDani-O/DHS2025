@@ -1,5 +1,6 @@
 *.pyc
 *.class
 compilador*
+!compilador.g4
 .antlr
 target

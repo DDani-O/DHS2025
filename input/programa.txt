@@ -1,29 +1,39 @@
-int x;
-int y, z;
-int a, b = 2, c, d = 10, e;
+void funcion1 (int, double w);
 
-for(;z > 25;);
+int main (){
+    int x;
+    int y, z;
+    int a, b = 2, c, d = 10, e;
 
-for (y = 0, int z = 10; y <= 10 && z != 0 ; ++y, z--) {
-    x = 8 * 3 + 4 - 5;
+    for(;z > 25;);
+
+    for (y = 0, int z = 10; y <= 10 && z != 0 ; ++y, z--) {
+        x = 8 * 3 + 4 - 5;
+    }
+
+    if (a) {
+        x = a;
+    }
+
+    while (a) {
+        x = a;
+        y = 10;
+    }
+
+    while (x)
+        x = x;
+
+
+    double xyz;
+    int x;
+
+    x = 0;
+    temp = xyz;
+    a = 10;
+
+    return 0;
 }
 
-if (a) {
-    x = a;
+void funcion1 (int q, double w){
+    return (q + w);
 }
-
-while (a) {
-    x = a;
-    y = 10;
-}
-
-while (x)
-    x = x;
-
-
-double xyz;
-int x;
-
-x = 0;
-temp = xyz;
-a = 10;

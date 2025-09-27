@@ -44,6 +44,8 @@ ELSE :  'else' ;
 FOR :   'for' ;
 WHILE : 'while' ;
 
+RETURN : 'return' ;
+
 ID : (LETRA | '_')(LETRA | DIGITO | '_')* ;
 
 WS : [ \n\r\t] -> skip ;
@@ -73,16 +75,35 @@ instruccion : asignacion
             | iwhile
             | ifor
             | bloque
+            | prototipo
+            | funcion
+            | ireturn
+            | llamadaFunc PYC
             ;
 
 bloque : LLA instrucciones LLC ;
 
 // ======= Funciones =======
 
-// Declaración
-// Inicialización
+// Prototipado
+prototipo : tipo ID PA listParamsProt? PC PYC ; // el '?' significa "0 o 1 veces"
+listParamsProt : parametroProt (COMA parametroProt)*;
+parametroProt : tipo
+              | tipo ID // en los prototipos, el nombre es opcional
+              ;
 
-// Las llamadas a funciones también están presentes como factores en las operaciones
+// Definición
+funcion : tipo ID PA listParamsDef? PC bloque ;
+listParamsDef : parametroDef (COMA parametroDef)* ;
+parametroDef : tipo ID; // en una definición, el nombre es obligatorio
+
+ireturn : RETURN opal PYC 
+        | RETURN PYC
+        ;
+
+// Llamada
+llamadaFunc : ID PA listArgs? PC ;
+listArgs : opal (COMA opal)* ; // las llamadas a funciones están presentes como factores en las operaciones
 
 // ======= Instrucciones de control =======
 
@@ -193,5 +214,5 @@ factorSufix : factorCore (INC | DEC)? ;
 factorCore : NUMERO
            | ID
            | PA exp PC
-           | // llamada a función
+           | llamadaFunc
            ;

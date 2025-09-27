@@ -118,7 +118,8 @@ ifor : FOR PA initialize PYC test PYC step PC instruccion
      | FOR PA initialize PYC test PYC step PC PYC
      ;
 
-initialize : expASIG listInit
+initialize : ID listInit
+           | expASIG listInit
            | tipo expASIG listInit
            |
            ; // Pueden ser tanto asignaciones como declaraciones
@@ -139,7 +140,8 @@ listStep : COMA step
 
 // ======= Declaraciones y asignación de variables =======
 
-declaracion : tipo ID inic listavar PYC ;
+declaracion : expDEC PYC ;
+expDEC: tipo ID inic listavar ;
 tipo : INT
      | DOUBLE
      | CHAR

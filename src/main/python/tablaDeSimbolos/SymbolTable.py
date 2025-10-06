@@ -1,10 +1,15 @@
+from Context import Contexto
+from ID import ID
+
+
 class TS:
     _instance = None # Instancia única de la tabla de símbolos
 
     def __new__(cls): # Metodo creador
         if cls._instance is None: # Si no existe una instancia, crearla
             cls._instance = super(TS, cls).__new__(cls)
-            cls._instance.contextos = [] # Inicialización
+            # Inicialización
+            cls._instance.contextos = []
             cls._instance.addContexto() # Agregar el contexto global
         return cls._instance # Si existe una instancia, retornarla
     
@@ -23,12 +28,13 @@ class TS:
         if len(self.contextos) > 1: # No eliminar el contexto global
             self.contextos.pop()
 
-    def addSimbolo(self, nombre, valor): # Agrega un símbolo al contexto actual
-        self.contextos[-1].addSimbolo(nombre, valor)
+    def addSimbolo(self, simbolo : ID): # Agrega un símbolo al contexto actual
+        self.contextos[-1].addSimbolo(simbolo)
 
-    def buscarSimbolo(self, nombre): # Busca un símbolo en los contextos desde el actual hacia el global
+    def buscarSimbolo(self, nombre: str) -> ID: # Busca un símbolo en los contextos desde el actual hacia el global
         for contexto in reversed(self.contextos):
-            valor = contexto.buscarSimbolo(nombre)
-            if valor is not None:
-                return valor
-        return None # Si no se encuentra el símbolo
+            simbolo = contexto.buscarSimbolo(nombre)
+            if simbolo is not None:
+                return simbolo
+        return None  # Si no se encuentra el símbolo en ningún contexto
+    

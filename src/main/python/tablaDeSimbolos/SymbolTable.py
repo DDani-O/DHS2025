@@ -38,3 +38,6 @@ class TS:
                 return simbolo
         return None  # Si no se encuentra el símbolo en ningún contexto
     
+    def buscarSimboloContexto(self, nombre: str) -> ID:
+        simbolo = self.contextos[-1].buscarSimbolo(nombre)
+        return simbolo

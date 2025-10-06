@@ -1,5 +1,6 @@
 from compiladorParser import compiladorParser
 from compiladorListener import compiladorListener
+from tablaDeSimbolos.SymbolTable import TS
 
 class Escucha(compiladorListener) :
     # Esta clase personalizada la creamos porque el Listener original
@@ -8,12 +9,24 @@ class Escucha(compiladorListener) :
     # permanezcan.
 
     declaracion = 0
+
+    def __init__(self):
+        super().__init__()
+        self.TS = TS()
     
     def enterPrograma(self, ctx:compiladorParser.ProgramaContext):
         print("Comienza el parsing")
 
     def exitPrograma(self, ctx:compiladorParser.ProgramaContext):
         print("Termina el parsing")
+
+    def enterBloque(self, ctx):
+        TS.addContexto()
+        print("Contexto creado")
+
+    def exitBloque(self, ctx):
+        TS.delContexto()
+        print("Contexto eliminado")
 
     def enterDeclaracion(self, ctx:compiladorParser.DeclaracionContext):
         self.declaracion += 1

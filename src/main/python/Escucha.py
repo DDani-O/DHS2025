@@ -14,11 +14,15 @@ class Escucha(compiladorListener) :
         super().__init__()
         self.TS = TS()
     
+    # Inicio del programa
+
     def enterPrograma(self, ctx:compiladorParser.ProgramaContext):
         print("Comienza el parsing")
 
     def exitPrograma(self, ctx:compiladorParser.ProgramaContext):
         print("Termina el parsing")
+
+    # Trabajo con contextos
 
     def enterBloque(self, ctx):
         TS.addContexto()
@@ -27,6 +31,8 @@ class Escucha(compiladorListener) :
     def exitBloque(self, ctx):
         TS.delContexto()
         print("Contexto eliminado")
+
+    # Trabajo con IDs
 
     def enterDeclaracion(self, ctx:compiladorParser.DeclaracionContext):
         self.declaracion += 1

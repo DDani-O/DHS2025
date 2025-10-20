@@ -55,14 +55,18 @@ class Escucha(compiladorListener) :
             # Tenemos 2 tipos: inicializadas y no inicializadas
             if '=' in declaracion : 
                 nombre, valor = [term.strip() for term in declaracion.split('=')] # No podemos usar '()' porque sería un generador
-                # Carga en la TS (vemos primero si ya existía)
-                if(self.TS.buscarSimboloContexto(nombre)) : # El símbolo ya existe
-                    print("ERROR: '" + nombre + "' ya existe en el contexto.") # CAMBIAR POR UNA EXC
-                else :
-                    # Creación del símbolo
-                    nuevaVar = Variable(nombre,tipo)
-                    nuevaVar.inicializado = True
-                    self.TS.addSimbolo(nuevaVar)
+            else :
+                nombre = declaracion.strip()
+
+            # Carga en la TS (vemos primero si ya existía)
+            if(self.TS.buscarSimboloContexto(nombre)) : # El símbolo ya existe
+                print("ERROR: '" + nombre + "' ya existe en el contexto.") # CAMBIAR POR UNA EXC
+            else :
+                # Creación del símbolo
+                nuevaVar = Variable(nombre,tipo)
+                nuevaVar.inicializado = True
+                # Carga
+                self.TS.addSimbolo(nuevaVar)
 
     def exitProtoripo(self, ctx:compiladorParser.PrototipoContext): 
         # Quizás haya que ver esto con exitFuncion tmb

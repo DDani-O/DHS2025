@@ -1,0 +1,103 @@
+Esto se hace con un visitor, después de tener el árbol gramatical.
+Si el árbol está roto (hay errores gramaticales), NO debe generar el código intermedio (para el final).
+Tenemos que desarmar las instrucciones para que solo se usen HASTA 3 direcciones por vez.
+Vamos a ignorar las declaraciones de variables.
+
+--------------------------------------
+
+Operacion básica:
+    x = y op z
+Operaciones que podemos usar:
+    x = y
+    x = cte
+    jmp L
+    if x jmp L
+    ifnot x jmp L
+    push x
+    pop x               // devuelve el tope de pila y lo borra
+
+Funciones auxiliares a programar:
+    a) Generador de nombres de variables temporales
+    b) Generador de etiquetas temporales
+
+--------------------------------------
+
+Ejemplo 1:
+    Original:
+        x = y + 2 * z - 2;
+    Traducción:
+        t0 = 2 * z
+        t1 = y + t0
+        t2 = t1 - 2
+        x = t2
+
+// vamos a usar este formato y dejamos al optimizador que borre lo que no sirve
+
+Ejemplo 3:
+    Original:
+        if ((x > 10) && (y < 5) || (z == 0)) <...>
+    Traducción:
+        t0 = x > 10
+        t1 = Y < 5
+        t2 = t0 && t1
+        t3 = z == 0
+        t4 = t2 || t3
+        if t4 <...>
+
+
+Ejemplo 4
+    Original
+        if (x < 0)
+            z = y * x
+        else
+            z = y / x
+    Traducción:
+        t0 = x < 0
+        if t0 jmp L0
+        t1 = y / x      // else
+        z = t1          // else
+        jmp L1          // saltea el True
+        label L0
+        t2 = y * x
+        z = t2
+        label L1
+
+Ejemplo 5: while
+    Original:
+        x = 0
+        while (x < 10)
+        x = x + 1
+    Traducción:
+        x = 0
+        label L0
+        t0 = x < 10 
+        ifnot t0 jmp L1     // sale del while
+        t1 = x + 1
+        x = t1
+        jmp L0              // vuelve a entrar al while
+        label L1
+
+Ejemplo 6: llamada a funcion
+    Original
+        x = f(y,z)
+    Traducción
+        push y 
+        push z
+        push L0
+        jmp f       // vamos a la funcion
+        label L0    // volvemos de la funcion
+        pop x       // captura el valor de retorno
+
+Ejemplo 7: def de Funciones
+    Original
+        int f(int y, int z){
+            return y + z;
+        }
+    Traducción
+        label f
+        pop t0      // guardamos la dir de retorno
+        pop z
+        pop y
+        t1 = y + z
+        push t1
+        jmp t0

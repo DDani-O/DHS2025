@@ -8,7 +8,7 @@ class TS:
     def __new__(cls): # Metodo creador
         if cls._instance is None: # Si no existe una instancia, crearla
             cls._instance = super(TS, cls).__new__(cls)
-            # Inicialización
+            # --- Inicialización ---
             cls._instance.contextos = []
             cls._instance.addContexto() # Agregar el contexto global
         return cls._instance # Si existe una instancia, retornarla

@@ -7,29 +7,47 @@ class Escucha(compiladorListener) :
     # Esta clase personalizada la creamos porque el Listener original se sobreescribe cada vez que se vuelve a generar el parser.
     # Con esto podemos definir los metodos que nos interesen y que permanezcan.
 
-    declaracion = 0
-
+    # ---------- Inicio ----------
+    
     def __init__(self):
         super().__init__()
-        self.TS = TS()
-    
-    # ---------- Inicio del programa ----------
+        self.TS = TS.getTS()
 
     def enterPrograma(self, ctx:compiladorParser.ProgramaContext):
-        print("Comienza el parsing")
+        print(" ------ Comienza el parsing ------ ")
 
     def exitPrograma(self, ctx:compiladorParser.ProgramaContext):
-        print("Termina el parsing")
+        self.imprimirCTX() # Imprime el contexto global
+        print(" ------ Termina el parsing ------ ")
 
     # ---------- Manejo de contextos ----------
+    # En C, la creación de contextos no se limita únicamente a contextos en bloques con llave, sino que también se crean contextos en estructuras de control.
+    # Esto implica que también tendríamos que considerar la creación y eliminación de contextos cuando las estructuras de control solo tienen una instrucción (sin llaves).
+    # No obstante, el profe nos limitó el alcance a solo bloques con llaves, por lo que no vamos a implementar este comportamiento adicional.
+
+    # Nota sobre la impresión de contextos: vamos a imprimir solo el contexto actual cada vez que salgamos de un contexto local, justo antes de eliminarlo. Ahora bien, como el global no se elimina nunca, lo imprimiremos al final del parsing.
 
     def enterBloque(self, ctx):
-        TS.addContexto()
+        self.TS.addContexto()
         print("Contexto creado")
 
     def exitBloque(self, ctx):
-        TS.delContexto()
+        self.imprimirCTX()
+        self.TS.delContexto()
         print("Contexto eliminado")
+
+    def enterIfor(self, ctx): # Esto hay que hacerlo sí o sí porque el 'for' admite declaraciones en la sección init y no hacerlo provocaría que esas variables se carguen en el contexto global.
+        self.TS.addContexto()
+        print("Contexto creado")
+    # Hacer esto provoca que se generen 2 contextos anidados en los 'for' con llaves. No obstante, esto es correcto a nivel teórico (por el scope de las variables) y además facilita la depuración.
+
+    def exitIfor(self, ctx):
+        self.imprimirCTX()
+        self.TS.delContexto()
+        print("Contexto eliminado")
+
+    def imprimirCTX(self): # Esto tiene que imprimir solamente el contexto actual porque si imprimimos toda la tabla terminamos teniendo el contexto global repetido por cada vez que entramos en un contexto local.
+        pass
 
     # ---------- Manejo de IDs ----------
 
@@ -75,4 +93,4 @@ class Escucha(compiladorListener) :
     # ---------- Otros ----------
 
     def __str__(self):
-        return "Se hicieron: " + str(self.declaracion) + " declaraciones."
+        pass

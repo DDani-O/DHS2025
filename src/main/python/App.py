@@ -26,8 +26,8 @@ def main(argv):
     visitante = Caminante()
     visitante.visitPrograma(tree)
     
-    print(escucha)
-    #print(tree.toStringTree(recog=parser))
+    # print(escucha)
+    # print(tree.toStringTree(recog=parser))
 
 if __name__ == '__main__':
     main(sys.argv)

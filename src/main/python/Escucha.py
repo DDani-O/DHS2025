@@ -47,7 +47,31 @@ class Escucha(compiladorListener) :
         print("Contexto eliminado")
 
     def imprimirCTX(self): # Esto tiene que imprimir solamente el contexto actual porque si imprimimos toda la tabla terminamos teniendo el contexto global repetido por cada vez que entramos en un contexto local.
-        pass
+        contexto = self.TS.contextos[-1]
+        simbolos = contexto.simbolos
+
+        print(f" --- Contexto ---")
+        if not simbolos: # Para dejar más limpia la salida
+            print("(vacío)")
+            return
+
+        # Cabecera de impresión
+        print(f"{ 'Nombre':<20} { 'Tipo':<12} { 'Inicializado':<12} { 'Usado':<6} Argumentos")
+
+        for nombre, simbolo in simbolos.items(): # 'items()' es un método estándar de diccionarios que devuelve una vista (parecido a un acceso directo) iterable de los pares (clave, valor)
+            # Obtener atributos básicos
+            tipo = simbolo.tipoDato
+            inicializado = simbolo.inicializado # En Py los valores booleanos se pueden castear a str directamente, así que no hace falta un if extra
+            usado = simbolo.usado
+
+            # Obtener los argumentos si se trata de una función
+            if isinstance(simbolo, Variable):
+                argumentos = "N/A"
+            else:
+                argumentos = ', '.join([arg.tipoDato for arg in simbolo.getListaArgs()]) if simbolo.getListaArgs() else "void" # Aplicamos condicional ternario para que el código quede más limpio
+
+            # Imprimir los datos del símbolo
+            print(f"{nombre:<20} {str(tipo):<12} {str(inicializado):<12} {str(usado):<6} {argumentos}")
 
     # ---------- Manejo de IDs ----------
 

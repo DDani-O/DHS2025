@@ -35,7 +35,7 @@ class Escucha(compiladorListener) :
                 f.write("Imposible generar la TS: Se encontraron errores durante el parsing.\n")
         else:
             # Imprimir la TS completa al finalizar el parsing
-            self.imprimirTS()
+            self.TS.imprimirTS()
         print(" ------ Termina el parsing ------ ")
 
     # -----------------------------------------
@@ -58,42 +58,6 @@ class Escucha(compiladorListener) :
 
     def exitIfor(self, ctx):
         self.TS.delContexto()
-
-    def imprimirTS(self):
-        """Imprime la TS completa usando el historial de contextos para mantener la jerarquía de indentación y el orden en que se crean los contextos."""
-        with open("ContenidoTS.txt", "w") as f:
-            historialTS = self.TS.getHistorialCTX()
-            if not historialTS:
-                f.write("Tabla de símbolos vacía.\n")
-                return
-
-            for idx, contexto in enumerate(historialTS):
-                prefijo = '    ' * contexto.nivel
-                f.write(f"{prefijo}--- Contexto #{idx} (nivel {contexto.nivel}) ---\n")
-
-                simbolos = contexto.simbolos
-                if not simbolos:
-                    f.write(f"{prefijo}(vacío)\n")
-                    continue # Salta al siguiente contexto
-
-                # Cabecera de impresión
-                f.write(f"{prefijo}{'Nombre':<20} {'Tipo':<12} {'Inicializado':<12} {'Usado':<6} Argumentos\n")
-
-                # Impresión de los símbolos
-                for nombre, simbolo in simbolos.items(): # 'items()' es un método estándar de diccionarios que devuelve una vista (parecido a un acceso directo) iterable de los pares (clave, valor)
-                    # Obtener atributos básicos
-                    tipo = simbolo.tipoDato
-                    inicializado = simbolo.inicializado # En Py los valores booleanos se pueden castear a str directamente, así que no hace falta un if extra
-                    usado = simbolo.usado
-
-                    # Obtener los argumentos si se trata de una función
-                    if isinstance(simbolo, Variable):
-                        argumentos = "N/A"
-                    else:
-                        argumentos = ', '.join([arg.tipoDato for arg in simbolo.getListaArgs()]) if simbolo.getListaArgs() else "void" # Aplicamos condicional ternario para que el código quede más limpio nomás
-
-                    # Imprimir los datos del símbolo
-                    f.write(f"{prefijo}{nombre:<20} {str(tipo):<12} {str(inicializado):<12} {str(usado):<6} {argumentos}\n")
 
     # -----------------------------------
     # ---------- Manejo de IDs ----------

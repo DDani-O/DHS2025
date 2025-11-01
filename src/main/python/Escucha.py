@@ -2,6 +2,7 @@ from compiladorParser import compiladorParser
 from compiladorListener import compiladorListener
 from tablaDeSimbolos.SymbolTable import TS
 from tablaDeSimbolos.Variable import Variable
+from Enumeraciones import TipoError
 
 class Escucha(compiladorListener) :
     # Esta clase personalizada la creamos porque el Listener original se sobreescribe cada vez que se vuelve a generar el parser.
@@ -16,7 +17,7 @@ class Escucha(compiladorListener) :
     # ---------- Utilidad ----------
     # ------------------------------
 
-    def registrarError(self, tipo : str, msj : str):
+    def registrarError(self, tipo : TipoError, msj : str):
         self.huboErrores = True
         print(f"ERROR {tipo}: {msj}")
 
@@ -90,7 +91,7 @@ class Escucha(compiladorListener) :
 
             # Carga en la TS (vemos primero si ya existía)
             if(self.TS.buscarSimboloContexto(nombre)) : # El símbolo ya existe
-                self.registrarError("semántico", f"'{nombre}' ya existe en el contexto.")
+                self.registrarError(TipoError.SEMANTICO, f"'{nombre}' ya existe en el contexto.")
             else :
                 # Creación del símbolo
                 nuevaVar = Variable(nombre,tipo)

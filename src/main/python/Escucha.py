@@ -86,8 +86,10 @@ class Escucha(compiladorListener) :
             # Tenemos 2 tipos: inicializadas y no inicializadas
             if '=' in declaracion : 
                 nombre, valor = [term.strip() for term in declaracion.split('=')] # No podemos usar '()' porque sería un generador
+                qInit = True
             else :
                 nombre = declaracion.strip()
+                qInit = False # Redundante, pero no está demás ser explícito
 
             # Carga en la TS (vemos primero si ya existía)
             if(self.TS.buscarSimboloContexto(nombre)) : # El símbolo ya existe
@@ -95,8 +97,8 @@ class Escucha(compiladorListener) :
             else :
                 # Creación del símbolo
                 nuevaVar = Variable(nombre,tipo)
-                nuevaVar.inicializado = True
-                # Carga
+                nuevaVar.inicializado = qInit
+                # Carga en la TS
                 self.TS.addSimbolo(nuevaVar)
 
     def exitProtoripo(self, ctx:compiladorParser.PrototipoContext): 

@@ -210,7 +210,6 @@ class Escucha(compiladorListener) :
         #       - crear/actualizar el símbolo de función en el contexto exterior,
         #       - crear el contexto local de la función y cargar los parámetros como variables locales.
 
-        # Si hay ErrorNode en la cabecera, no procesar
         if any(isinstance(hijo, ErrorNode) for hijo in ctx.getChildren()):
             return
 
@@ -220,48 +219,41 @@ class Escucha(compiladorListener) :
             self.registrarError(TipoError.SINTACTICO, "Definición de función incompleta: falta tipo o nombre.")
             return
 
-        # Construir lista de args (para el símbolo) a partir de la definición (tienen nombre)
+        # Construir lista de args (para el símbolo) a partir de la definición (solo parámetros con nombre)
         args_for_symbol = []
         params = []
         if ctx.listParamsDef() is not None:
             for p in ctx.listParamsDef().parametroDef():
                 t = p.tipo().getText() if p.tipo() is not None else None
                 n = p.ID().getText() if p.ID() is not None else None
-                if t is None or n is None:
-                    self.registrarError(TipoError.SINTACTICO, f"Parámetro de función '{nombre}' incompleto: falta tipo o nombre.")
+                if t is None:
+                    self.registrarError(TipoError.SINTACTICO, f"Parámetro de función '{nombre}' incompleto: falta tipo.")
                     continue
-                params.append((n, t))
-                args_for_symbol.append(Variable(n, t))
+                # Solo agregar parámetros con nombre (definiciones), ignorar si n es None (prototipos)
+                if n is not None:
+                    params.append((n, t))
+                    args_for_symbol.append(Variable(n, t))
 
-        # Comprobar si hay prototipo/entrada previa
         simbolo_prev = self.TS.buscarSimbolo(nombre)
         if simbolo_prev is None:
-            # Permitimos que 'main' no tenga prototipo
             if nombre != 'main':
                 self.registrarError(TipoError.SEMANTICO, f"Definición de función '{nombre}' sin prototipo previo (símbolo desconocido).")
-            # Crear el símbolo de función en el contexto actual (externo a la función)
             f = Funcion(nombre, tipo, args=args_for_symbol, inicializado=True)
             self.TS.addSimbolo(f)
             simbolo = f
         else:
-            # Si existe y es función, marcar inicializado y actualizar firma si procede
             if isinstance(simbolo_prev, Funcion):
                 simbolo_prev.setInicializado()
-                # Si el prototipo no tenía args con nombres, actualizarlos desde la definición
                 if simbolo_prev.getListaArgs() == [] and args_for_symbol:
                     simbolo_prev.args = args_for_symbol
                 simbolo = simbolo_prev
             else:
-                # Existe otro símbolo con ese nombre
                 self.registrarError(TipoError.SEMANTICO, f"'{nombre}' fue declarado como otro tipo de símbolo y ahora se intenta definir como función.")
-                # crear igualmente la función para seguir analizando
                 f = Funcion(nombre, tipo, args=args_for_symbol, inicializado=True)
                 self.TS.addSimbolo(f)
                 simbolo = f
 
-        # Ahora creamos el contexto LOCAL para la función y cargamos los parámetros como variables locales
         self.TS.addContexto()
-        # Agregar parámetros al contexto local
         for n, t in params:
             nuevaVar = Variable(n, t)
             nuevaVar.inicializado = True

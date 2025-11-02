@@ -1,7 +1,7 @@
 from pyparsing import List
-from Context import Contexto
-from ID import ID
-from Variable import Variable
+from tablaDeSimbolos.Context import Contexto
+from tablaDeSimbolos.ID import ID
+from tablaDeSimbolos.Variable import Variable
 
 
 class TS:

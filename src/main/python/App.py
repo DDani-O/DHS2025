@@ -13,7 +13,10 @@ from Caminante import Caminante
 #     antlr4 -Dlanguage=Python3 -visitor compilador.g4 -o .
 
 def main(argv):
-    archivo = "input/programa.txt"
+    # Entradas de testing
+    archivo = "input/entrada.txt"
+    # archivo = "input/programa.txt"
+
     if len(argv) > 1 :
         archivo = argv[1]
     input = FileStream(archivo)

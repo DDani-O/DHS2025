@@ -1,4 +1,4 @@
-from ID import ID
+from tablaDeSimbolos.ID import ID
 
 class Contexto:
     def __init__(self):

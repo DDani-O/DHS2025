@@ -118,19 +118,18 @@ ifor : FOR PA initialize PYC test PYC step PC instruccion
      | FOR PA initialize PYC test PYC step PC PYC
      ;
 
-initialize : ID listInit
-           | expASIG listInit
-           | tipo expASIG listInit
+// Solo puede ser una lista de todo dec., una lista de todo asig. o vacío
+initialize : expDEC
+           | expASIG (COMA expASIG)*
            |
-           ; // Pueden ser tanto asignaciones como declaraciones
-listInit : COMA initialize
-         |
-         ;
+           ;
 
+// Condición a probar. Puede ser una expresión o estar vacía
 test : opal
      |
      ;
 
+// Lista de expresiones separadas por coma o vacío
 step: exp listStep
      |
      ;

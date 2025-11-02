@@ -1,3 +1,0 @@
-Hola estoy probando!!!
-1 2 3 probando
-x + 45 / 12

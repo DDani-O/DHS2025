@@ -4,3 +4,4 @@ compilador*
 !compilador.g4
 .antlr
 target
+ContenidoTS.txt

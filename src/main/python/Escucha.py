@@ -3,6 +3,7 @@ from compiladorListener import compiladorListener
 from tablaDeSimbolos.SymbolTable import TS
 from tablaDeSimbolos.Variable import Variable
 from Enumeraciones import TipoError
+from antlr4 import ErrorNode
 
 class Escucha(compiladorListener) :
     # Esta clase personalizada la creamos porque el Listener original se sobreescribe cada vez que se vuelve a generar el parser.
@@ -20,6 +21,12 @@ class Escucha(compiladorListener) :
     def registrarError(self, tipo : TipoError, msj : str):
         self.huboErrores = True
         print(f"ERROR {tipo}: {msj}")
+
+    def visitErrorNode(self, nodo : ErrorNode):
+        """Captura errores sintácticos en el árbol y los reporta sin detener el parsing."""
+        self.huboErrores = True
+        texto_ErrorNode = nodo.getText()
+        self.registrarError(TipoError.SINTACTICO, f"'{texto_ErrorNode}'")
 
     # ----------------------------
     # ---------- Inicio ----------
@@ -70,6 +77,11 @@ class Escucha(compiladorListener) :
     def exitDeclaracion(self, ctx:compiladorParser.DeclaracionContext):
         # Una declaración es en realidad una lista de éstas, separadas por comas, que además pueden incluir una inicialización.
         # Por esta razón, no podemos hacer una lectura que simplemente tome el tipoDato + nombre e inmediatamnete agregue el símbolo a la tabla.
+
+        if any(isinstance(hijo, ErrorNode) for hijo in ctx.getChildren()):
+            # Si hay un ErrorNode el error se registró en visitErrorNode()
+            # No se puede procesar esta declaración, así que nos la saltamos
+            return
 
         # --- Lectura de la instrucción ---
         tipo = ctx.expDEC().tipo().getText() # Aparece una sola vez y es compartido por todas las declaraciones de la línea

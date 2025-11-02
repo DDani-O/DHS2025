@@ -91,6 +91,12 @@ class Escucha(compiladorListener) :
                 nombre = declaracion.strip()
                 qInit = False # Redundante, pero no está demás ser explícito
 
+            # Verificación de que en el contexto actual aún se permitan declaraciones
+            contexto_actual = self.TS.contextos[-1]
+            if not contexto_actual.canDeclarar():
+                self.registrarError(TipoError.SEMANTICO, f"Declaraciones no permitidas en este punto ('{nombre}').")
+                continue
+
             # Carga en la TS (vemos primero si ya existía)
             if(self.TS.buscarSimboloContexto(nombre)) : # El símbolo ya existe
                 self.registrarError(TipoError.SEMANTICO, f"'{nombre}' ya existe en el contexto.")
@@ -101,7 +107,18 @@ class Escucha(compiladorListener) :
                 # Carga en la TS
                 self.TS.addSimbolo(nuevaVar)
 
-    def exitProtoripo(self, ctx:compiladorParser.PrototipoContext): 
+        # Una vez procesadas las declaraciones de esta instrucción seguimos permitiendo declaraciones hasta que aparezca la primera instrucción que no sea una declaración.
+        # Este evento es detectado por exitInstruccion().
+
+    def exitInstruccion(self, ctx:compiladorParser.InstruccionContext):
+        """Si la instrucción actual NO es una declaración, cerramos la posibilidad de declarar en el contexto actual (las declaraciones solo se permiten al principio)."""
+        # ANTLR genera una clase InstruccionContext con métodos para obtener el contexto (subárbol) de cada subregla que aparece como alternativa en la producción.
+        # Si la alternativa está presente en el árbol, el método correspondiente devuelve el contexto hijo; si no está presente, devuelve None.
+        if ctx.declaracion() is None: # Por lo explicado antes, esto controla si la instrucción es una declaración o no
+            if self.TS.contextos:
+                self.TS.contextos[-1].forbidDeclaraciones()
+
+    def exitPrototipo(self, ctx:compiladorParser.PrototipoContext): 
         # Quizás haya que ver esto con exitFuncion tmb
         pass
 

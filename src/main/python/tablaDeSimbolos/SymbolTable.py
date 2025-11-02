@@ -1,3 +1,4 @@
+from pyparsing import List
 from Context import Contexto
 from ID import ID
 from Variable import Variable
@@ -6,7 +7,10 @@ from Variable import Variable
 class TS:
     _instance = None # Instancia única de la tabla de símbolos, según patrón singleton
 
-    def __new__(cls): # Metodo creador
+    contextos: List[Contexto] # Solo para que se muestre correctamente la hover info
+    historialCTX: List[Contexto] # Mismo de antes, esto NO añade atributos
+
+    def __new__(cls): # Metodo creador, intercepta la creación de nuevas instancias y se asegura que solo haya una
         if cls._instance is None: # Si no existe una instancia, crearla
             cls._instance = super(TS, cls).__new__(cls)
             # --- Inicialización ---

@@ -187,15 +187,16 @@ class Escucha(compiladorListener) :
 
         # Leer tipos de parámetros (en prototipos el nombre es opcional)
         parametrosPrototipo = []
-        if ctx.listParamsProt() is not None:  # Verificar si hay lista de parámetros
+        if hasattr(ctx, 'listParamsProt') and ctx.listParamsProt():
+            # Solo procesar parámetros si la función los tiene
             for paramCtx in ctx.listParamsProt().parametroProt():
-                if paramCtx.tipo() is not None:  # Verificar si hay tipo
+                if paramCtx.tipo():  # Verificar si hay tipo
                     tipoParam = paramCtx.tipo().getText()
                     # En prototipos, usamos nombre vacío para los parámetros
                     parametrosPrototipo.append(Variable('', tipoParam))
                 else:
                     self.registrarError(TipoError.SINTACTICO, f"Parámetro sin tipo en prototipo '{nombreFuncion}'")
-
+        
         # Verificar si ya existe un símbolo con ese nombre en el contexto actual
         if self.TS.buscarSimboloContexto(nombreFuncion):
             self.registrarError(TipoError.SEMANTICO, f"Prototipo '{nombreFuncion}' ya existe en el contexto.")
@@ -222,9 +223,10 @@ class Escucha(compiladorListener) :
         parametrosLocales = []
 
         # En definiciones, los parámetros DEBEN tener nombre
-        if ctx.listParamsDef() is not None:  # Verificar si hay lista de parámetros
+        if hasattr(ctx, 'listParamsDef') and ctx.listParamsDef():
+            # Solo procesar parámetros si la función los tiene
             for paramCtx in ctx.listParamsDef().parametroDef():
-                if paramCtx.tipo() is not None and paramCtx.ID() is not None:  # Verificar que existan tipo y nombre
+                if paramCtx.tipo() and paramCtx.ID():  # Verificar que existan tipo y nombre
                     tipoParam = paramCtx.tipo().getText()
                     nombreParam = paramCtx.ID().getText()
                     parametrosDefinicion.append(Variable(nombreParam, tipoParam))

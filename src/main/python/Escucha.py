@@ -2,6 +2,7 @@ from compiladorParser import compiladorParser
 from compiladorListener import compiladorListener
 from tablaDeSimbolos.SymbolTable import TS
 from tablaDeSimbolos.Variable import Variable
+from tablaDeSimbolos.Funcion import Funcion
 from Enumeraciones import TipoError
 from antlr4 import ErrorNode
 
@@ -131,12 +132,90 @@ class Escucha(compiladorListener) :
                 self.TS.contextos[-1].forbidDeclaraciones()
 
     def exitPrototipo(self, ctx:compiladorParser.PrototipoContext): 
-        # Quizás haya que ver esto con exitFuncion tmb
-        pass
+        # Procesar un prototipo: tipo ID '(' listParamsProt? ')' ';'
+        if any(isinstance(hijo, ErrorNode) for hijo in ctx.getChildren()):
+            return
+
+        tipo = ctx.tipo().getText()
+        nombre = ctx.ID().getText()
+
+        # Leer parámetros si existen (en los prototipos el nombre del parámetro es opcional)
+        args = []
+        if ctx.listParamsProt() is not None:
+            # listParamsProt : parametroProt (COMA parametroProt)*
+            for p in ctx.listParamsProt().parametroProt():
+                # parametroProt : tipo | tipo ID
+                t = p.tipo().getText()
+                # Para prototipo no necesitamos el nombre, sólo el tipo. Crear Variable con nombre vacío
+                args.append(Variable('', t))
+
+        # Verificar si ya existe un símbolo con ese nombre en el contexto actual
+        if self.TS.buscarSimboloContexto(nombre):
+            self.registrarError(TipoError.SEMANTICO, f"Prototipo '{nombre}' ya existe en el contexto.")
+            return
+
+        # Crear y agregar el prototipo (inicializado=False)
+        f = Funcion(nombre, tipo, args=args, inicializado=False)
+        self.TS.addSimbolo(f)
 
     # ---------------------------
     # ---------- Otros ----------
     # ---------------------------
+
+    def exitFuncion(self, ctx:compiladorParser.FuncionContext):
+        # Procesar definición de función: tipo ID '(' listParamsDef? ')' bloque
+        if any(isinstance(hijo, ErrorNode) for hijo in ctx.getChildren()):
+            return
+
+        tipo = ctx.tipo().getText()
+        nombre = ctx.ID().getText()
+
+        # Leer parámetros de la definición (en definiciones, los parámetros tienen nombre obligatorio)
+        args = []
+        if ctx.listParamsDef() is not None:
+            for p in ctx.listParamsDef().parametroDef():
+                t = p.tipo().getText()
+                n = p.ID().getText()
+                args.append(Variable(n, t))
+
+        # Verificar que exista un prototipo previo para esta función (regla del enunciado)
+        simbolo = self.TS.buscarSimbolo(nombre)
+        if simbolo is None:
+            # No había prototipo ni símbolo previo -> error de símbolo desconocido
+            self.registrarError(TipoError.SEMANTICO, f"Definición de función '{nombre}' sin prototipo previo (símbolo desconocido).")
+            # Aún así, agregamos la función para continuar con el análisis, marcada como inicializada
+            f = Funcion(nombre, tipo, args=args, inicializado=True)
+            self.TS.addSimbolo(f)
+            return
+
+        # Si existe un símbolo previo, comprobar que sea una función
+        if not isinstance(simbolo, Funcion):
+            self.registrarError(TipoError.SEMANTICO, f"'{nombre}' fue declarado como otro tipo de símbolo y ahora se intenta definir como función.")
+            return
+
+        # Actualizar la función existente: marcar inicializado y, si no tenía args, asignarlos
+        simbolo.setInicializado()
+        # Si en el prototipo no se habían pasado nombres de parámetros, y ahora sí se tienen, actualizar la lista
+        if simbolo.getListaArgs() == [] and args:
+            simbolo.args = args
+
+    def exitLlamadaFunc(self, ctx:compiladorParser.LlamadaFuncContext):
+        # Manejar llamada a función: ID '(' listArgs? ')'
+        if any(isinstance(hijo, ErrorNode) for hijo in ctx.getChildren()):
+            return
+
+        nombre = ctx.ID().getText()
+        simbolo = self.TS.buscarSimbolo(nombre)
+        if simbolo is None:
+            self.registrarError(TipoError.SEMANTICO, f"Llamada a función desconocida '{nombre}'.")
+            return
+
+        if not isinstance(simbolo, Funcion):
+            self.registrarError(TipoError.SEMANTICO, f"'{nombre}' no es una función.")
+            return
+
+        # Marcar como usada
+        simbolo.setUsado()
 
     def __str__(self):
         pass

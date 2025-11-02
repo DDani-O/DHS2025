@@ -174,90 +174,73 @@ class Escucha(compiladorListener) :
                 self.TS.contextos[-1].forbidDeclaraciones()
 
     def exitPrototipo(self, ctx:compiladorParser.PrototipoContext): 
-        # Procesar un prototipo: tipo ID '(' listParamsProt? ')' ';'
+        """Procesa el prototipo de una función: tipo ID '(' listParamsProt? ')' ';'"""
         if any(isinstance(hijo, ErrorNode) for hijo in ctx.getChildren()):
             return
 
-        tipo = ctx.tipo().getText() if ctx.tipo() is not None else None
-        nombre = ctx.ID().getText() if ctx.ID() is not None else None
-        if tipo is None or nombre is None:
-            self.registrarError(TipoError.SINTACTICO, "Prototipo de función incompleto: falta tipo o nombre.")
-            return
+        tipoRetorno = ctx.tipo().getText()
+        nombreFuncion = ctx.ID().getText()
 
-        # Leer parámetros si existen (en los prototipos el nombre del parámetro es opcional)
-        args = []
-        if ctx.listParamsProt() is not None:
-            # listParamsProt : parametroProt (COMA parametroProt)*
-            for p in ctx.listParamsProt().parametroProt():
-                t = p.tipo().getText() if p.tipo() is not None else None
-                if t is None:
-                    self.registrarError(TipoError.SINTACTICO, f"Prototipo de función '{nombre}' con parámetro sin tipo.")
-                    continue
-                args.append(Variable('', t))
+        # Leer tipos de parámetros (en prototipos el nombre es opcional)
+        parametrosPrototipo = []
+        for paramCtx in ctx.listParamsProt().parametroProt():
+            tipoParam = paramCtx.tipo().getText()
+            # En prototipos, usamos nombre vacío para los parámetros
+            parametrosPrototipo.append(Variable('', tipoParam))
 
         # Verificar si ya existe un símbolo con ese nombre en el contexto actual
-        if self.TS.buscarSimboloContexto(nombre):
-            self.registrarError(TipoError.SEMANTICO, f"Prototipo '{nombre}' ya existe en el contexto.")
+        if self.TS.buscarSimboloContexto(nombreFuncion):
+            self.registrarError(TipoError.SEMANTICO, f"Prototipo '{nombreFuncion}' ya existe en el contexto.")
             return
 
         # Crear y agregar el prototipo (inicializado=False)
-        f = Funcion(nombre, tipo, args=args, inicializado=False)
-        self.TS.addSimbolo(f)
+        funcion = Funcion(nombreFuncion, tipoRetorno, args=parametrosPrototipo, inicializado=False)
+        self.TS.addSimbolo(funcion)
 
     def enterFuncion(self, ctx:compiladorParser.FuncionContext):
-        # Se ejecuta antes de procesar el bloque/los parámetros de la función.
-        # Aquí: - comprobar existencia de prototipo (salvo 'main'),
-        #       - crear/actualizar el símbolo de función en el contexto exterior,
-        #       - crear el contexto local de la función y cargar los parámetros como variables locales.
-
+        """Procesa la definición de una función y crea su contexto local."""
         if any(isinstance(hijo, ErrorNode) for hijo in ctx.getChildren()):
             return
 
-        tipo = ctx.tipo().getText() if ctx.tipo() is not None else None
-        nombre = ctx.ID().getText() if ctx.ID() is not None else None
-        if tipo is None or nombre is None:
-            self.registrarError(TipoError.SINTACTICO, "Definición de función incompleta: falta tipo o nombre.")
-            return
+        tipoRetorno = ctx.tipo().getText()
+        nombreFuncion = ctx.ID().getText()
 
-        # Construir lista de args (para el símbolo) a partir de la definición (solo parámetros con nombre)
-        args_for_symbol = []
-        params = []
-        if ctx.listParamsDef() is not None:
-            for p in ctx.listParamsDef().parametroDef():
-                t = p.tipo().getText() if p.tipo() is not None else None
-                n = p.ID().getText() if p.ID() is not None else None
-                if t is None:
-                    self.registrarError(TipoError.SINTACTICO, f"Parámetro de función '{nombre}' incompleto: falta tipo.")
-                    continue
-                # Solo agregar parámetros con nombre (definiciones), ignorar si n es None (prototipos)
-                if n is not None:
-                    params.append((n, t))
-                    args_for_symbol.append(Variable(n, t))
+        # Construir lista de parámetros con sus tipos para el símbolo de función
+        parametrosDefinicion = []
+        parametrosLocales = []
 
-        simbolo_prev = self.TS.buscarSimbolo(nombre)
-        if simbolo_prev is None:
-            if nombre != 'main':
-                self.registrarError(TipoError.SEMANTICO, f"Definición de función '{nombre}' sin prototipo previo (símbolo desconocido).")
-            f = Funcion(nombre, tipo, args=args_for_symbol, inicializado=True)
-            self.TS.addSimbolo(f)
-            simbolo = f
+        # En definiciones, los parámetros DEBEN tener nombre
+        for paramCtx in ctx.listParamsDef().parametroDef():
+            tipoParam = paramCtx.tipo().getText()
+            nombreParam = paramCtx.ID().getText()
+            parametrosDefinicion.append(Variable(nombreParam, tipoParam))
+            parametrosLocales.append((nombreParam, tipoParam))
+
+        # Buscar prototipo o entrada previa
+        simboloPrevio = self.TS.buscarSimbolo(nombreFuncion)
+        if simboloPrevio is None:
+            # main no necesita prototipo
+            if nombreFuncion != 'main':
+                self.registrarError(TipoError.SEMANTICO, f"Definición de función '{nombreFuncion}' sin prototipo previo.")
+            funcion = Funcion(nombreFuncion, tipoRetorno, args=parametrosDefinicion, inicializado=True)
+            self.TS.addSimbolo(funcion)
         else:
-            if isinstance(simbolo_prev, Funcion):
-                simbolo_prev.setInicializado()
-                if simbolo_prev.getListaArgs() == [] and args_for_symbol:
-                    simbolo_prev.args = args_for_symbol
-                simbolo = simbolo_prev
+            if isinstance(simboloPrevio, Funcion):
+                simboloPrevio.setInicializado()
+                # Actualizar los argumentos con nombres si el prototipo no los tenía
+                if simboloPrevio.getListaArgs() == [] and parametrosDefinicion:
+                    simboloPrevio.args = parametrosDefinicion
             else:
-                self.registrarError(TipoError.SEMANTICO, f"'{nombre}' fue declarado como otro tipo de símbolo y ahora se intenta definir como función.")
-                f = Funcion(nombre, tipo, args=args_for_symbol, inicializado=True)
-                self.TS.addSimbolo(f)
-                simbolo = f
+                self.registrarError(TipoError.SEMANTICO, f"'{nombreFuncion}' fue declarado como otro tipo de símbolo.")
+                funcion = Funcion(nombreFuncion, tipoRetorno, args=parametrosDefinicion, inicializado=True)
+                self.TS.addSimbolo(funcion)
 
+        # Crear contexto local y agregar parámetros como variables inicializadas
         self.TS.addContexto()
-        for n, t in params:
-            nuevaVar = Variable(n, t)
-            nuevaVar.inicializado = True
-            self.TS.addSimbolo(nuevaVar)
+        for nombreParam, tipoParam in parametrosLocales:
+            paramLocal = Variable(nombreParam, tipoParam)
+            paramLocal.inicializado = True  # los parámetros están inicializados por definición
+            self.TS.addSimbolo(paramLocal)
 
     # ---------------------------
     # ---------- Otros ----------

@@ -211,12 +211,16 @@ class Escucha(compiladorListener) :
         if any(isinstance(hijo, ErrorNode) for hijo in ctx.getChildren()):
             return
             
-        if ctx.tipo() is None or ctx.ID() is None:
+        if not ctx.tipo() or not ctx.ID():
             self.registrarError(TipoError.SINTACTICO, "Definición de función incompleta: falta tipo o nombre.")
             return
 
         tipoRetorno = ctx.tipo().getText()
         nombreFuncion = ctx.ID().getText()
+        
+        # Buscar prototipo y verificar coincidencia de parámetros
+        simboloPrevio = self.TS.buscarSimbolo(nombreFuncion)
+        if simboloPrevio and isinstance(simboloPrevio, Funcion) and nombreFuncion != 'main':
 
         # Construir lista de parámetros con sus tipos para el símbolo de función
         parametrosDefinicion = []

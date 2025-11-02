@@ -14,8 +14,8 @@ from Caminante import Caminante
 
 def main(argv):
     # Entradas de testing
-    archivo = "input/entrada.txt"
-    # archivo = "input/programa.txt"
+    # archivo = "input/entrada.txt"
+    archivo = "input/programa.txt"
 
     if len(argv) > 1 :
         archivo = argv[1]

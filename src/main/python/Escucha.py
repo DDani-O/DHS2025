@@ -178,17 +178,21 @@ class Escucha(compiladorListener) :
         if any(isinstance(hijo, ErrorNode) for hijo in ctx.getChildren()):
             return
 
-        tipo = ctx.tipo().getText()
-        nombre = ctx.ID().getText()
+        tipo = ctx.tipo().getText() if ctx.tipo() is not None else None
+        nombre = ctx.ID().getText() if ctx.ID() is not None else None
+        if tipo is None or nombre is None:
+            self.registrarError(TipoError.SINTACTICO, "Prototipo de función incompleto: falta tipo o nombre.")
+            return
 
         # Leer parámetros si existen (en los prototipos el nombre del parámetro es opcional)
         args = []
         if ctx.listParamsProt() is not None:
             # listParamsProt : parametroProt (COMA parametroProt)*
             for p in ctx.listParamsProt().parametroProt():
-                # parametroProt : tipo | tipo ID
-                t = p.tipo().getText()
-                # Para prototipo no necesitamos el nombre, sólo el tipo. Crear Variable con nombre vacío
+                t = p.tipo().getText() if p.tipo() is not None else None
+                if t is None:
+                    self.registrarError(TipoError.SINTACTICO, f"Prototipo de función '{nombre}' con parámetro sin tipo.")
+                    continue
                 args.append(Variable('', t))
 
         # Verificar si ya existe un símbolo con ese nombre en el contexto actual
@@ -210,18 +214,23 @@ class Escucha(compiladorListener) :
         if any(isinstance(hijo, ErrorNode) for hijo in ctx.getChildren()):
             return
 
-        tipo = ctx.tipo().getText()
-        nombre = ctx.ID().getText()
+        tipo = ctx.tipo().getText() if ctx.tipo() is not None else None
+        nombre = ctx.ID().getText() if ctx.ID() is not None else None
+        if tipo is None or nombre is None:
+            self.registrarError(TipoError.SINTACTICO, "Definición de función incompleta: falta tipo o nombre.")
+            return
 
         # Construir lista de args (para el símbolo) a partir de la definición (tienen nombre)
         args_for_symbol = []
         params = []
         if ctx.listParamsDef() is not None:
             for p in ctx.listParamsDef().parametroDef():
-                t = p.tipo().getText()
-                n = p.ID().getText()
+                t = p.tipo().getText() if p.tipo() is not None else None
+                n = p.ID().getText() if p.ID() is not None else None
+                if t is None or n is None:
+                    self.registrarError(TipoError.SINTACTICO, f"Parámetro de función '{nombre}' incompleto: falta tipo o nombre.")
+                    continue
                 params.append((n, t))
-                # Para la firma del símbolo nos interesa el tipo; el nombre del parámetro lo guardamos en la tabla local
                 args_for_symbol.append(Variable(n, t))
 
         # Comprobar si hay prototipo/entrada previa
@@ -254,7 +263,6 @@ class Escucha(compiladorListener) :
         self.TS.addContexto()
         # Agregar parámetros al contexto local
         for n, t in params:
-            # Parámetros se consideran inicializados
             nuevaVar = Variable(n, t)
             nuevaVar.inicializado = True
             self.TS.addSimbolo(nuevaVar)

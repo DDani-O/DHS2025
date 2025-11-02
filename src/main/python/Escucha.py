@@ -178,25 +178,20 @@ class Escucha(compiladorListener) :
         if any(isinstance(hijo, ErrorNode) for hijo in ctx.getChildren()):
             return
 
-        if ctx.tipo() is None or ctx.ID() is None:
-            self.registrarError(TipoError.SINTACTICO, "Prototipo de función incompleto: falta tipo o nombre.")
-            return
-            
         tipoRetorno = ctx.tipo().getText()
         nombreFuncion = ctx.ID().getText()
 
         # Leer tipos de parámetros (en prototipos el nombre es opcional)
         parametrosPrototipo = []
-        if hasattr(ctx, 'listParamsProt') and ctx.listParamsProt():
-            # Solo procesar parámetros si la función los tiene
+        if ctx.listParamsProt() is not None:  # Verificar si hay lista de parámetros
             for paramCtx in ctx.listParamsProt().parametroProt():
-                if paramCtx.tipo():  # Verificar si hay tipo
+                if paramCtx.tipo() is not None:  # Verificar si hay tipo
                     tipoParam = paramCtx.tipo().getText()
                     # En prototipos, usamos nombre vacío para los parámetros
                     parametrosPrototipo.append(Variable('', tipoParam))
                 else:
                     self.registrarError(TipoError.SINTACTICO, f"Parámetro sin tipo en prototipo '{nombreFuncion}'")
-        
+
         # Verificar si ya existe un símbolo con ese nombre en el contexto actual
         if self.TS.buscarSimboloContexto(nombreFuncion):
             self.registrarError(TipoError.SEMANTICO, f"Prototipo '{nombreFuncion}' ya existe en el contexto.")
@@ -210,27 +205,18 @@ class Escucha(compiladorListener) :
         """Procesa la definición de una función y crea su contexto local."""
         if any(isinstance(hijo, ErrorNode) for hijo in ctx.getChildren()):
             return
-            
-        if not ctx.tipo() or not ctx.ID():
-            self.registrarError(TipoError.SINTACTICO, "Definición de función incompleta: falta tipo o nombre.")
-            return
 
         tipoRetorno = ctx.tipo().getText()
         nombreFuncion = ctx.ID().getText()
-        
-        # Buscar prototipo y verificar coincidencia de parámetros
-        simboloPrevio = self.TS.buscarSimbolo(nombreFuncion)
-        if simboloPrevio and isinstance(simboloPrevio, Funcion) and nombreFuncion != 'main':
 
         # Construir lista de parámetros con sus tipos para el símbolo de función
         parametrosDefinicion = []
         parametrosLocales = []
 
         # En definiciones, los parámetros DEBEN tener nombre
-        if hasattr(ctx, 'listParamsDef') and ctx.listParamsDef():
-            # Solo procesar parámetros si la función los tiene
+        if ctx.listParamsDef() is not None:  # Verificar si hay lista de parámetros
             for paramCtx in ctx.listParamsDef().parametroDef():
-                if paramCtx.tipo() and paramCtx.ID():  # Verificar que existan tipo y nombre
+                if paramCtx.tipo() is not None and paramCtx.ID() is not None:  # Verificar que existan tipo y nombre
                     tipoParam = paramCtx.tipo().getText()
                     nombreParam = paramCtx.ID().getText()
                     parametrosDefinicion.append(Variable(nombreParam, tipoParam))

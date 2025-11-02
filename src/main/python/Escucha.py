@@ -241,6 +241,49 @@ class Escucha(compiladorListener) :
         if simbolo.getListaArgs() == [] and args:
             simbolo.args = args
 
+    def exitExpASIG(self, ctx:compiladorParser.ExpASIGContext):
+        # expASIG : ID ASIG opal ;  -> verificar que la variable izquierda esté declarada
+        # Si hay ErrorNode, ignora
+        if any(isinstance(hijo, ErrorNode) for hijo in ctx.getChildren()):
+            return
+
+        nombre = ctx.ID().getText()
+        simbolo = self.TS.buscarSimbolo(nombre)
+        if simbolo is None:
+            self.registrarError(TipoError.SEMANTICO, f"Uso de identificador no declarado '{nombre}'.")
+            return
+
+        # Si existe y es Variable o Funcion (si alguien asigna a una función, es error)
+        # Permitimos solo Variable
+        from tablaDeSimbolos.Variable import Variable as VarClass
+        if not isinstance(simbolo, VarClass):
+            self.registrarError(TipoError.SEMANTICO, f"'{nombre}' no es una variable y no puede asignarse.")
+            return
+
+        # Marcar como inicializada (por la asignación)
+        simbolo.setInicializado()
+
+    def exitFactorCore(self, ctx:compiladorParser.FactorCoreContext):
+        # factorCore : NUMERO | ID | PA exp PC | llamadaFunc
+        # Aparece cuando se usa un ID en una expresión -- verificar existencia
+        if any(isinstance(hijo, ErrorNode) for hijo in ctx.getChildren()):
+            return
+
+        # Si tiene ID como hijo
+        try:
+            id_token = ctx.ID()
+        except Exception:
+            id_token = None
+
+        if id_token is not None and id_token.getText() is not None:
+            nombre = id_token.getText()
+            simbolo = self.TS.buscarSimbolo(nombre)
+            if simbolo is None:
+                self.registrarError(TipoError.SEMANTICO, f"Uso de identificador no declarado '{nombre}'.")
+                return
+            # Marcar como usada (lectura)
+            simbolo.setUsado()
+
     def exitLlamadaFunc(self, ctx:compiladorParser.LlamadaFuncContext):
         # Manejar llamada a función: ID '(' listArgs? ')'
         if any(isinstance(hijo, ErrorNode) for hijo in ctx.getChildren()):

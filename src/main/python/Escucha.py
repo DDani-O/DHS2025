@@ -123,6 +123,48 @@ class Escucha(compiladorListener) :
         # Una vez procesadas las declaraciones de esta instrucción seguimos permitiendo declaraciones hasta que aparezca la primera instrucción que no sea una declaración.
         # Este evento es detectado por exitInstruccion().
 
+    def exitInitialize(self, ctx:compiladorParser.InitializeContext):
+        """Procesa declaraciones dentro de la sección init del for cuando vienen con tipo (expDEC).
+        La gramática recoge las declaraciones como expDEC (sin el ';'), por lo que hay que crear los símbolos de otra forma.
+        """
+        # Si no hay expDEC, no hay declaraciones con tipo en la inicialización
+        if ctx.expDEC() is None:
+            return
+
+        # Si hay error sintáctico, no procesar
+        if any(isinstance(hijo, ErrorNode) for hijo in ctx.getChildren()):
+            self.registrarError(TipoError.SINTACTICO, "Formato incorrecto en la inicialización del for")
+            return
+
+        expdec = ctx.expDEC()
+        tipo = expdec.tipo().getText()
+
+        # Obtener el texto de la inicialización (p. ej. "int i = 0, j = 1") y procesar como en exitDeclaracion
+        declaraciones = expdec.getText()
+        declaraciones = declaraciones.replace(tipo, '').strip()
+        # listavar no contiene ';', así que las comas separan las declaraciones
+        declaraciones = [d.strip() for d in declaraciones.split(',') if d.strip()]
+
+        for declaracion in declaraciones:
+            if '=' in declaracion:
+                nombre, valor = [t.strip() for t in declaracion.split('=', 1)]
+                qInit = True
+            else:
+                nombre = declaracion.strip()
+                qInit = False
+
+            contexto_actual = self.TS.contextos[-1]
+            if not contexto_actual.canDeclarar():
+                self.registrarError(TipoError.SEMANTICO, f"Declaraciones no permitidas en este punto ('{nombre}').")
+                continue
+
+            if self.TS.buscarSimboloContexto(nombre):
+                self.registrarError(TipoError.SEMANTICO, f"'{nombre}' ya existe en el contexto.")
+            else:
+                nuevaVar = Variable(nombre, tipo)
+                nuevaVar.inicializado = qInit
+                self.TS.addSimbolo(nuevaVar)
+
     def exitInstruccion(self, ctx:compiladorParser.InstruccionContext):
         """Si la instrucción actual NO es una declaración, cerramos la posibilidad de declarar en el contexto actual (las declaraciones solo se permiten al principio)."""
         # ANTLR genera una clase InstruccionContext con métodos para obtener el contexto (subárbol) de cada subregla que aparece como alternativa en la producción.

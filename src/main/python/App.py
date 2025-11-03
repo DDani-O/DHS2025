@@ -15,7 +15,8 @@ from Caminante import Caminante
 
 def main(argv):
     # Entradas de testing
-    archivo = "input/entradaConErrores.txt"
+    archivo = "input/entradaSimple.txt"
+    # archivo = "input/entradaConErrores.txt"
     # archivo = "input/entradaCorrecta.txt"
 
     if len(argv) > 1 :

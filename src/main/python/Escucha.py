@@ -130,8 +130,7 @@ class Escucha(compiladorListener) :
                 try:
                     valor = self.eval_opal(opal_ctx)
                 except Exception as e:
-                    self.registrarError(TipoError.SEMANTICO,
-                                        f"Error al evaluar inicializador de '{nombre}': {e}")
+                    self.registrarError(TipoError.SEMANTICO, f"Error al evaluar inicializador de '{nombre}': {e}")
                     continue
 
                 simbolo = self.TS.buscarSimboloContexto(nombre) or self.TS.buscarSimbolo(nombre)
@@ -273,13 +272,17 @@ class Escucha(compiladorListener) :
             return
 
         tipo_destino = simbolo.getTipoDato()
-        tipo_valor = self._tipoExp(ctx.opal())
+        tipo_valor = self.tipoExp(ctx.opal())
         
         if tipo_valor and tipo_destino != tipo_valor:
             self.registrarError(TipoError.SEMANTICO, f"Tipo incompatible en asignación a '{nombre}': se esperaba '{tipo_destino}', pero se obtuvo '{tipo_valor}'.")
+            return
         
         # Marcar como inicializada (por la asignación)
         simbolo.setInicializado()
+
+        self.tipoExp(ctx.opal())  # Evaluar la expresión para marcar variables usadas
+        
 
     def exitFactorCore(self, ctx:compiladorParser.FactorCoreContext):
         # factorCore : NUMERO | ID | PA exp PC | llamadaFunc

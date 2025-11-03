@@ -50,7 +50,7 @@ class Escucha(compiladorListener) :
     # -----------------------------------------
     # ---------- Manejo de contextos ----------
     # -----------------------------------------
-    # En C, la creación de contextos no se limita únicamente a contextos en bloques con llave, sino que también se crean contextos en estructuras de control.
+    # En C, la creación de contextos no se limita únicamente a contextos en bloques con llave, sino que también se crean contextos en estructuras de control y en funciones (esto lo tratamos en la sección de manejo de funciones).
     # Esto implica que también tendríamos que considerar la creación y eliminación de contextos cuando las estructuras de control solo tienen una instrucción (sin llaves).
     # No obstante, el profe nos limitó el alcance a solo bloques con llaves, por lo que no vamos a implementar este comportamiento adicional.
 
@@ -68,12 +68,9 @@ class Escucha(compiladorListener) :
     def exitIfor(self, ctx):
         self.TS.delContexto()
 
-    # -----------------------------------
-    # ---------- Manejo de IDs ----------
-    # -----------------------------------
-
-    def enterDeclaracion(self, ctx:compiladorParser.DeclaracionContext):
-        pass
+    # -----------------------------------------
+    # ---------- Manejo de Variables ----------
+    # -----------------------------------------
 
     def exitDeclaracion(self, ctx:compiladorParser.DeclaracionContext):
         # Una declaración es en realidad una lista de éstas, separadas por comas, que además pueden incluir una inicialización.
@@ -124,10 +121,8 @@ class Escucha(compiladorListener) :
         # Este evento es detectado por exitInstruccion().
 
     def exitInitialize(self, ctx:compiladorParser.InitializeContext):
-        """Procesa declaraciones dentro de la sección init del for cuando vienen con tipo (expDEC).
-        La gramática recoge las declaraciones como expDEC (sin el ';'), por lo que hay que crear los símbolos de otra forma.
-        """
-        # Si no hay expDEC, no hay declaraciones con tipo en la inicialización
+        """Procesa declaraciones dentro de la sección init del for. La gramática recoge las declaraciones como expDEC (sin el ';'), por lo que hay que crear los símbolos de otra forma."""
+        # Si no hay expDEC, no hay declaraciones, sino asignaciones
         if ctx.expDEC() is None:
             return
 
@@ -165,6 +160,8 @@ class Escucha(compiladorListener) :
                 nuevaVar.inicializado = qInit
                 self.TS.addSimbolo(nuevaVar)
 
+        # Igual que en exitDeclaracion, las declaraciones siguen permitidas hasta la primera instrucción no declarativa.
+
     def exitInstruccion(self, ctx:compiladorParser.InstruccionContext):
         """Si la instrucción actual NO es una declaración, cerramos la posibilidad de declarar en el contexto actual (las declaraciones solo se permiten al principio)."""
         # ANTLR genera una clase InstruccionContext con métodos para obtener el contexto (subárbol) de cada subregla que aparece como alternativa en la producción.
@@ -172,6 +169,11 @@ class Escucha(compiladorListener) :
         if ctx.declaracion() is None: # Por lo explicado antes, esto controla si la instrucción es una declaración o no
             if self.TS.contextos:
                 self.TS.contextos[-1].forbidDeclaraciones()
+
+
+    # -------------------------------------------
+    # ---------- Manejo de Funciones ------------
+    # -------------------------------------------
 
     def exitPrototipo(self, ctx:compiladorParser.PrototipoContext): 
         """Procesa el prototipo de una función: tipo ID '(' listParamsProt? ')' ';'"""

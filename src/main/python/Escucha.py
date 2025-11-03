@@ -179,7 +179,7 @@ class Escucha(compiladorListener) :
         if simbolo is None:
             self.registrarError(TipoError.SEMANTICO, f"Uso de identificador no declarado '{nombre}'.")
             return
-
+        
         # Si existe y es Variable o Funcion (si alguien asigna a una función, es error)
         # Permitimos solo Variable
         from tablaDeSimbolos.Variable import Variable as VarClass
@@ -208,8 +208,12 @@ class Escucha(compiladorListener) :
             if simbolo is None:
                 self.registrarError(TipoError.SEMANTICO, f"Uso de identificador no declarado '{nombre}'.")
                 return
-            # Marcar como usada (lectura)
-            simbolo.setUsado()
+            else :
+                # Marcar como usada (lectura)
+                simbolo.setUsado()
+                if not simbolo.getInicializado():
+                    self.registrarError(TipoError.SEMANTICO, f"Variable '{nombre}' usada sin inicializar.")
+                print(f"Variable usada: {nombre}")
 
     def __str__(self):
         pass

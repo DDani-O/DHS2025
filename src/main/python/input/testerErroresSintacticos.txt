@@ -1,0 +1,19 @@
+int a = 0, b = 0, c = 0
+int x = 0, y = 0, z = 0;
+int g, h i j;
+
+x = a + b;
+
+y = c * z
+
+
+if a){
+    if (b {
+        int d = 0;
+    }
+}
+
+for(int i = 0, x = ; ; {
+
+}
+

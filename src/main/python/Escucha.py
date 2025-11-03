@@ -14,6 +14,8 @@ class Escucha(compiladorListener) :
         super().__init__()
         self.TS = TS.getTS()
         self.huboErrores = False
+        self._in_declaracion = False
+        self._decl_pending = None
 
     # ------------------------------
     # ---------- Utilidad ----------
@@ -68,6 +70,11 @@ class Escucha(compiladorListener) :
     # ---------- Manejo de Variables ----------
     # -----------------------------------------
 
+    def enterDeclaracion(self, ctx: compiladorParser.DeclaracionContext):
+        # Cada vez que entramos a una declaración activamos la bandera y la lista de pendientes
+        self._in_declaracion = True
+        self._decl_pending = []
+
     def exitDeclaracion(self, ctx:compiladorParser.DeclaracionContext):
         # Una declaración es en realidad una lista de éstas, separadas por comas, que además pueden incluir una inicialización.
         # Por esta razón, no podemos hacer una lectura que simplemente tome el tipoDato + nombre e inmediatamnete agregue el símbolo a la tabla.
@@ -75,6 +82,9 @@ class Escucha(compiladorListener) :
         if any(isinstance(hijo, ErrorNode) for hijo in ctx.getChildren()):
             # Si hay un ErrorNode el error se registró con el EscuchaErroresSintacticos
             # No se puede procesar esta declaración, así que nos la saltamos
+            # Limpiar bandera y pendientes por si acaso
+            self._in_declaracion = False
+            self._decl_pending = None
             return
 
         # --- Lectura de la instrucción ---
@@ -85,7 +95,7 @@ class Escucha(compiladorListener) :
         declaraciones = declaraciones.replace(tipo,'').replace(';','').strip() # Limpiamos la línea y nos quedamos únicamente con los nombres de las variables y las posibles inicializaciones, separadas por ','. Ej: declaraciones <-- "x = 10, y, z = 0"
         declaraciones = [declaracion.strip() for declaracion in declaraciones.split(',')] # Convertimos el texto de las declaraciones en efectivamente una List de declaraciones, separando el texto orignal en las ','. Ej: declaraciones <-- ["x = 10", "y", "z = 0"]
 
-        # --- Procesamiento de las declaraciones y generación de símbolos ---
+        # --- Primer pase: registrar nombres (sin evaluar inicializadores) ---
         # Llegados a este punto, tenemos una lista de declaraciones de variables, pero todavía NO sabemos si están inicializadas
         # Además, hay que controlar si el símbolo ya estaba en la TS, en cuyo caso hay que reportar un error
         for declaracion in declaraciones :
@@ -113,17 +123,56 @@ class Escucha(compiladorListener) :
                 # Carga en la TS
                 self.TS.addSimbolo(nuevaVar)
 
+        # --- Segundo pase: resolver inicializadores aplazados (los que vinieron como expASIG dentro de la declaración) ---
+        if self._decl_pending:
+            for nombre, opal_ctx in self._decl_pending:
+                # opal_ctx es el sub-ctx de la expresión derecha que guardamos en exitExpASIG
+                try:
+                    valor = self.eval_opal(opal_ctx)
+                except Exception as e:
+                    self.registrarError(TipoError.SEMANTICO,
+                                        f"Error al evaluar inicializador de '{nombre}': {e}")
+                    continue
+
+                simbolo = self.TS.buscarSimboloContexto(nombre) or self.TS.buscarSimbolo(nombre)
+                if simbolo is None:
+                    # Si por algún motivo no está, reportar (no debería pasar si primer pase funcionó)
+                    self.registrarError(TipoError.SEMANTICO, f"Uso de identificador no declarado '{nombre}'.")
+                    continue
+
+                # Asignar y marcar inicializado
+                try:
+                    self.TS.asignar(nombre, valor)
+                except Exception:
+                    # Ajustá según la API de TS; si no tenés asignar, hacé el set de valor en el objeto Simbolo
+                    simbolo.valor = valor
+
+                simbolo.setInicializado()
+
+        # limpiamos bandera y pendientes al salir de la declaración
+        self._in_declaracion = False
+        self._decl_pending = None
+
         # Una vez procesadas las declaraciones de esta instrucción seguimos permitiendo declaraciones hasta que aparezca la primera instrucción que no sea una declaración.
         # Este evento es detectado por exitInstruccion().
+
+    def enterInitialize(self, ctx: compiladorParser.InitializeContext):
+        # igual que enterDeclaracion: activar bandera y lista
+        self._in_declaracion = True
+        self._decl_pending = []
 
     def exitInitialize(self, ctx:compiladorParser.InitializeContext):
         """Procesa declaraciones dentro de la sección init del for. La gramática recoge las declaraciones como expDEC (sin el ';'), por lo que hay que crear los símbolos de otra forma."""
         # Si no hay expDEC, no hay declaraciones, sino asignaciones
         if ctx.expDEC() is None:
+            self._in_declaracion = False
+            self._decl_pending = None
             return
 
         # Si hay error sintáctico, no procesar
         if any(isinstance(hijo, ErrorNode) for hijo in ctx.getChildren()):
+            self._in_declaracion = False
+            self._decl_pending = None
             return
 
         expdec = ctx.expDEC()
@@ -155,6 +204,36 @@ class Escucha(compiladorListener) :
                 nuevaVar.inicializado = qInit
                 self.TS.addSimbolo(nuevaVar)
 
+        # Resolver pendientes
+        if self._decl_pending:
+            for nombre, opal_ctx in self._decl_pending:
+                # opal_ctx es el sub-ctx de la expresión derecha que guardamos en exitExpASIG
+                try:
+                    valor = self.eval_opal(opal_ctx)
+                except Exception as e:
+                    self.registrarError(TipoError.SEMANTICO,
+                                        f"Error al evaluar inicializador de '{nombre}': {e}")
+                    continue
+
+                simbolo = self.TS.buscarSimboloContexto(nombre) or self.TS.buscarSimbolo(nombre)
+                if simbolo is None:
+                    # Si por algún motivo no está, reportar (no debería pasar si primer pase funcionó)
+                    self.registrarError(TipoError.SEMANTICO, f"Uso de identificador no declarado '{nombre}'.")
+                    continue
+
+                # Asignar y marcar inicializado
+                try:
+                    self.TS.asignar(nombre, valor)
+                except Exception:
+                    # Ajustá según la API de TS; si no tenés asignar, hacé el set de valor en el objeto Simbolo
+                    simbolo.valor = valor
+
+                simbolo.setInicializado()
+
+        # limpiamos bandera y pendientes al salir de la declaración
+        self._in_declaracion = False
+        self._decl_pending = None
+
         # Igual que en exitDeclaracion, las declaraciones siguen permitidas hasta la primera instrucción no declarativa.
 
     def exitInstruccion(self, ctx:compiladorParser.InstruccionContext):
@@ -177,16 +256,20 @@ class Escucha(compiladorListener) :
             return
 
         nombre = ctx.ID().getText()
+
+        # Si estamos dentro de una declaración, guardamos la asignación para evaluarla después
+        if getattr(self, "_in_declaracion", False):
+            # guardamos (nombre, opal_ctx) en pendientes
+            if self._decl_pending is None:
+                self._decl_pending = []
+            self._decl_pending.append((nombre, ctx.opal()))
+            # no hacemos más comprobaciones ahora
+            return
+
+        # comportamiento fuera de declaraciones: comprobaciones inmediatas
         simbolo = self.TS.buscarSimbolo(nombre)
         if simbolo is None:
             self.registrarError(TipoError.SEMANTICO, f"Uso de identificador no declarado '{nombre}'.")
-            return
-        
-        # Si existe y es Variable o Funcion (si alguien asigna a una función, es error)
-        # Permitimos solo Variable
-        from tablaDeSimbolos.Variable import Variable as VarClass
-        if not isinstance(simbolo, VarClass):
-            self.registrarError(TipoError.SEMANTICO, f"'{nombre}' no es una variable y no puede asignarse.")
             return
 
         # Marcar como inicializada (por la asignación)
@@ -196,6 +279,10 @@ class Escucha(compiladorListener) :
         # factorCore : NUMERO | ID | PA exp PC | llamadaFunc
         # Aparece cuando se usa un ID en una expresión -- verificar existencia
         if any(isinstance(hijo, ErrorNode) for hijo in ctx.getChildren()):
+            return
+        
+        # Si estamos en el pase de declaración, no comprobamos lecturas todavía
+        if getattr(self, "_in_declaracion", False):
             return
 
         # Si tiene ID como hijo

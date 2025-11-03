@@ -217,9 +217,10 @@ class Escucha(compiladorListener) :
                     self.registrarError(TipoError.SEMANTICO, f"Variable '{nombre}' usada sin inicializar.")
 
     def buscarVariablesNoUsadas(self):
-        for nombre, var in self.TS.historialCTX.items():
-            if not var.getUsado():
-                self.registrarError(TipoError.SEMANTICO, f"Variable '{nombre}' declarada pero no utilizada.")
+        for index, contexto in enumerate(self.TS.historialCTX):
+            for nombre, simbolo in contexto.simbolos.items():
+                if not simbolo.getUsado():
+                    self.registrarError(TipoError.SEMANTICO, f"Variable '{nombre}' declarada pero no utilizada.")
         
     def __str__(self):
         pass

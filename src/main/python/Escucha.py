@@ -59,12 +59,6 @@ class Escucha(compiladorListener):
     # Instrucciones de control
     def enterIfor(self, ctx): # Cuando se entra en un 'for'
         self.ts.addContexto()
-
-    def enterIwhile(self, ctx):
-        self.ts.addContexto()
-
-    def enterIif(self, ctx):
-        self.ts.addContexto()
     
     # ------------ Eliminación de contextos ------------
     # Bloque estándar
@@ -73,12 +67,6 @@ class Escucha(compiladorListener):
 
     # Instrucciones de control
     def exitIfor(self, ctx): # Cuando se sale de un 'for'
-        self.ts.delContexto()
-
-    def enterIwhile(self, ctx):
-        self.ts.delContexto()
-
-    def enterIif(self, ctx):
         self.ts.delContexto()
 
     # ------------ Agregado de símbolos tipo Variable ------------

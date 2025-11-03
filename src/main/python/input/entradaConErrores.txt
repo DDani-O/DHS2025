@@ -12,3 +12,18 @@ for(int i = 0; i < 10; i++){
     }
     x = y + z;
 }
+
+
+{
+    int w, x, z;
+
+    int w;
+
+    x = z;
+
+    int m;
+
+    for(i = 0, int j = 0; ; ){
+        j++;
+    }
+}

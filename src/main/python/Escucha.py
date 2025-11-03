@@ -122,7 +122,6 @@ class Escucha(compiladorListener) :
 
         # Si hay error sintáctico, no procesar
         if any(isinstance(hijo, ErrorNode) for hijo in ctx.getChildren()):
-            self.registrarError(TipoError.SINTACTICO, "Formato incorrecto en la inicialización del for")
             return
 
         expdec = ctx.expDEC()

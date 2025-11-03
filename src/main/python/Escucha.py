@@ -182,13 +182,12 @@ class Escucha(compiladorListener) :
             self.registrarError(TipoError.SEMANTICO, f"Uso de identificador no declarado '{nombre}'.")
             return
         
-        # Si existe y es Variable o Funcion (si alguien asigna a una función, es error)
-        # Permitimos solo Variable
-        from tablaDeSimbolos.Variable import Variable as VarClass
-        if not isinstance(simbolo, VarClass):
-            self.registrarError(TipoError.SEMANTICO, f"'{nombre}' no es una variable y no puede asignarse.")
-            return
-
+        tipo_destino = simbolo.getTipoDato()
+        tipo_valor = self._tipoExp(ctx.opal())
+        
+        if tipo_valor and tipo_destino != tipo_valor:
+            self.registrarError(TipoError.SEMANTICO, f"Tipo incompatible en asignación a '{nombre}': se esperaba '{tipo_destino}', pero se obtuvo '{tipo_valor}'.")
+        
         # Marcar como inicializada (por la asignación)
         simbolo.setInicializado()
 
@@ -210,17 +209,54 @@ class Escucha(compiladorListener) :
             if simbolo is None:
                 self.registrarError(TipoError.SEMANTICO, f"Uso de identificador no declarado '{nombre}'.")
                 return
-            else :
-                # Marcar como usada (lectura)
-                simbolo.setUsado()
-                if not simbolo.getInicializado():
-                    self.registrarError(TipoError.SEMANTICO, f"Variable '{nombre}' usada sin inicializar.")
+            # Marcar como usada (lectura)
+            if not simbolo.getInicializado():
+                self.registrarError(TipoError.SEMANTICO, f"Variable '{nombre}' usada sin inicializar.")
+            simbolo.setUsado()
 
+    def tipoExp(self, ctx):
+        if ctx is None:
+            return None
+        
+        if hasattr(ctx, 'ID') and ctx.ID():
+            nombre = ctx.ID().getText()
+            var = self.buscarExistenciaVariable(nombre)
+            if var is None:
+                return None
+            var.setUsado()
+            if not var.getInicializado():
+                self.registrarError(TipoError.SEMANTICO, f"Variable '{nombre}' usada sin inicializar.")
+            return var.getTipoDato()
+        
+        if hasattr(ctx, 'NUMERO') and ctx.NUMERO():
+            return "int"
+        
+        tipos = set()
+        for i in range(ctx.getChildCount()):
+            tipo_hijo = self.tipoExp(ctx.getChild(i))
+            if tipo_hijo:
+                tipos.add(tipo_hijo)
+
+        if len(tipos) == 1:
+            return tipos.pop()
+        elif len(tipos) > 1:
+            self.registrarError(TipoError.SEMANTICO, "Tipos incompatibles en la expresión.")
+            return None
+        else:   
+            return None
+        
     def buscarVariablesNoUsadas(self):
         for index, contexto in enumerate(self.TS.historialCTX):
             for nombre, simbolo in contexto.simbolos.items():
                 if not simbolo.getUsado():
                     self.registrarError(TipoError.SEMANTICO, f"Variable '{nombre}' declarada pero no utilizada.")
-        
+    
+    def buscarExistenciaVariable(self, nombre):
+        simbolo = self.TS.buscarSimbolo(nombre)
+        if simbolo is None:
+            self.registrarError(TipoError.SEMANTICO, f"Uso de identificador no declarado '{nombre}'.")
+            return None
+        return simbolo
+    
     def __str__(self):
         pass

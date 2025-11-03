@@ -1,0 +1,10 @@
+int x = 0, y, z;
+double w, p;
+
+for(int i = 0; i < 10; i++){
+    int j = 0;
+    for(; j < 5 ; ++j){
+        z = 2 + 3;
+    }
+    x = y + z;
+}

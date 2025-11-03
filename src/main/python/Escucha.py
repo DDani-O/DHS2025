@@ -213,7 +213,6 @@ class Escucha(compiladorListener) :
                 simbolo.setUsado()
                 if not simbolo.getInicializado():
                     self.registrarError(TipoError.SEMANTICO, f"Variable '{nombre}' usada sin inicializar.")
-                print(f"Variable usada: {nombre}")
 
     def __str__(self):
         pass

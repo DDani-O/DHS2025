@@ -23,12 +23,6 @@ class Escucha(compiladorListener) :
         self.huboErrores = True
         print(f"ERROR {tipo}: {msj}")
 
-    def visitErrorNode(self, nodo : ErrorNode):
-        """Captura errores sintácticos en el árbol y los reporta sin detener el parsing."""
-        self.huboErrores = True
-        texto_ErrorNode = nodo.getText()
-        self.registrarError(TipoError.SINTACTICO, f"'{texto_ErrorNode}'")
-
     # ----------------------------
     # ---------- Inicio ----------
     # ----------------------------

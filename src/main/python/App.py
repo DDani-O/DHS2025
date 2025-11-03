@@ -3,6 +3,7 @@ from antlr4 import *
 from compiladorLexer  import compiladorLexer
 from compiladorParser import compiladorParser
 from Escucha import Escucha
+from EscuchaErroresSintacticos import EscuchaErroresSintacticos
 from Caminante import Caminante
 
 # En caso de no poder ejecutar el programa Python por

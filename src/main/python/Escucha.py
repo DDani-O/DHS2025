@@ -170,106 +170,6 @@ class Escucha(compiladorListener) :
             if self.TS.contextos:
                 self.TS.contextos[-1].forbidDeclaraciones()
 
-
-    # -------------------------------------------
-    # ---------- Manejo de Funciones ------------
-    # -------------------------------------------
-
-    def exitPrototipo(self, ctx:compiladorParser.PrototipoContext): 
-        """Procesa el prototipo de una función: tipo ID '(' listParamsProt? ')' ';'"""
-        if any(isinstance(hijo, ErrorNode) for hijo in ctx.getChildren()):
-            return
-
-        tipoRetorno = ctx.tipo().getText()
-        nombreFuncion = ctx.ID().getText()
-
-        # Leer tipos de parámetros (en prototipos el nombre es opcional)
-        parametrosPrototipo = []
-        if ctx.listParamsProt() is not None:  # Verificar si hay lista de parámetros
-            for paramCtx in ctx.listParamsProt().parametroProt():
-                if paramCtx.tipo() is not None:  # Verificar si hay tipo
-                    tipoParam = paramCtx.tipo().getText()
-                    # En prototipos, usamos nombre vacío para los parámetros
-                    parametrosPrototipo.append(Variable('', tipoParam))
-                else:
-                    self.registrarError(TipoError.SINTACTICO, f"Parámetro sin tipo en prototipo '{nombreFuncion}'")
-
-        # Verificar si ya existe un símbolo con ese nombre en el contexto actual
-        if self.TS.buscarSimboloContexto(nombreFuncion):
-            self.registrarError(TipoError.SEMANTICO, f"Prototipo '{nombreFuncion}' ya existe en el contexto.")
-            return
-
-        # Crear y agregar el prototipo (inicializado=False)
-        funcion = Funcion(nombreFuncion, tipoRetorno, args=parametrosPrototipo, inicializado=False)
-        self.TS.addSimbolo(funcion)
-
-    def enterFuncion(self, ctx:compiladorParser.FuncionContext):
-        """Procesa la definición de una función y crea su contexto local."""
-        if any(isinstance(hijo, ErrorNode) for hijo in ctx.getChildren()):
-            return
-
-        tipoRetorno = ctx.tipo().getText()
-        nombreFuncion = ctx.ID().getText()
-
-        # Construir lista de parámetros con sus tipos para el símbolo de función
-        parametrosDefinicion = []
-        parametrosLocales = []
-
-        # En definiciones, los parámetros DEBEN tener nombre
-        if ctx.listParamsDef() is not None:  # Verificar si hay lista de parámetros
-            for paramCtx in ctx.listParamsDef().parametroDef():
-                if paramCtx.tipo() is not None and paramCtx.ID() is not None:  # Verificar que existan tipo y nombre
-                    tipoParam = paramCtx.tipo().getText()
-                    nombreParam = paramCtx.ID().getText()
-                    parametrosDefinicion.append(Variable(nombreParam, tipoParam))
-                    parametrosLocales.append((nombreParam, tipoParam))
-                else:
-                    # Reportar error si falta tipo o nombre
-                    self.registrarError(TipoError.SINTACTICO, 
-                        f"Parámetro incompleto en función '{nombreFuncion}': falta tipo o nombre.")
-
-        # Buscar prototipo o entrada previa
-        simboloPrevio = self.TS.buscarSimbolo(nombreFuncion)
-        if simboloPrevio is None:
-            # main no necesita prototipo
-            if nombreFuncion != 'main':
-                self.registrarError(TipoError.SEMANTICO, f"Definición de función '{nombreFuncion}' sin prototipo previo.")
-            funcion = Funcion(nombreFuncion, tipoRetorno, args=parametrosDefinicion, inicializado=True)
-            self.TS.addSimbolo(funcion)
-        else:
-            if isinstance(simboloPrevio, Funcion):
-                simboloPrevio.setInicializado()
-                # Actualizar los argumentos con nombres si el prototipo no los tenía
-                if simboloPrevio.getListaArgs() == [] and parametrosDefinicion:
-                    simboloPrevio.args = parametrosDefinicion
-            else:
-                self.registrarError(TipoError.SEMANTICO, f"'{nombreFuncion}' fue declarado como otro tipo de símbolo.")
-                funcion = Funcion(nombreFuncion, tipoRetorno, args=parametrosDefinicion, inicializado=True)
-                self.TS.addSimbolo(funcion)
-
-        # Crear contexto local y agregar parámetros como variables inicializadas
-        self.TS.addContexto()
-        for nombreParam, tipoParam in parametrosLocales:
-            paramLocal = Variable(nombreParam, tipoParam)
-            paramLocal.inicializado = True  # los parámetros están inicializados por definición
-            self.TS.addSimbolo(paramLocal)
-
-    # ---------------------------
-    # ---------- Otros ----------
-    # ---------------------------
-
-    def exitFuncion(self, ctx:compiladorParser.FuncionContext):
-        # Al salir de la función eliminamos el contexto local creado en enterFuncion
-        if any(isinstance(hijo, ErrorNode) for hijo in ctx.getChildren()):
-            # Si hubo errores sintácticos, simplemente limpiamos el contexto igualmente
-            if self.TS.contextos:
-                self.TS.delContexto()
-            return
-
-        # Eliminar contexto local de la función
-        if self.TS.contextos:
-            self.TS.delContexto()
-
     def exitExpASIG(self, ctx:compiladorParser.ExpASIGContext):
         # expASIG : ID ASIG opal ;  -> verificar que la variable izquierda esté declarada
         # Si hay ErrorNode, ignora
@@ -312,24 +212,6 @@ class Escucha(compiladorListener) :
                 return
             # Marcar como usada (lectura)
             simbolo.setUsado()
-
-    def exitLlamadaFunc(self, ctx:compiladorParser.LlamadaFuncContext):
-        # Manejar llamada a función: ID '(' listArgs? ')'
-        if any(isinstance(hijo, ErrorNode) for hijo in ctx.getChildren()):
-            return
-
-        nombre = ctx.ID().getText()
-        simbolo = self.TS.buscarSimbolo(nombre)
-        if simbolo is None:
-            self.registrarError(TipoError.SEMANTICO, f"Llamada a función desconocida '{nombre}'.")
-            return
-
-        if not isinstance(simbolo, Funcion):
-            self.registrarError(TipoError.SEMANTICO, f"'{nombre}' no es una función.")
-            return
-
-        # Marcar como usada
-        simbolo.setUsado()
 
     def __str__(self):
         pass

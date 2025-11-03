@@ -170,6 +170,11 @@ class Escucha(compiladorListener) :
             if self.TS.contextos:
                 self.TS.contextos[-1].forbidDeclaraciones()
 
+
+    # ---------------------------
+    # ---------- Otros ----------
+    # ---------------------------
+
     def exitExpASIG(self, ctx:compiladorParser.ExpASIGContext):
         # expASIG : ID ASIG opal ;  -> verificar que la variable izquierda esté declarada
         # Si hay ErrorNode, ignora

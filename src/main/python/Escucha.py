@@ -7,6 +7,7 @@ from tablaDeSimbolos.Variable import Variable
 
 from Enumeraciones import TipoError
 from EscuchaErroresSintacticos import EscuchaErroresSintacticos # Nos hace falta saber si hubo errores sintácticos para no imprimir la TS cuando salimos del programa
+from antlr4 import ErrorNode, ParserRuleContext 
 
 class Escucha(compiladorListener):
 
@@ -16,6 +17,9 @@ class Escucha(compiladorListener):
         self.huboErrores = False  # Bandera para indicar si hubo errores semánticos
         # Los errores sintácticos se manejan en EscuchaErroresSintacticos
 
+    def __str__(self):
+        pass
+
     # ###########################################################################
     # Utilidades
     # ###########################################################################
@@ -24,6 +28,20 @@ class Escucha(compiladorListener):
         """Recibe un mensaje de error y lo imprime por consola. Además, marca que hubo errores en la compilación."""
         self.huboErrores = True
         print(f"ERROR {tipo}: {msj}")
+
+    def buscarFactorCores(self, ctx: ParserRuleContext):
+        """Recorre recursivamente el subárbol sintáctico a partir del contexto que se le pase y devuelve una lista con todos los nodos FactorCoreContext encontrados."""
+        result = [] # Acumula los FactorCores encontrados
+        # Paso 1: verificamos si el context actual es factorCore
+        if isinstance(ctx, compiladorParser.FactorCoreContext):
+            result.append(ctx) # Si encontramos un FactorCore, lo agregamos a la lista
+        # Paso 2: recorremos todos los hijos del context
+        for child in ctx.getChildren():
+            if isinstance(child, ParserRuleContext):
+                # Llamada recursiva: exploramos los descendientes y nos traemos los FactorCores que encontremos
+                result.extend(self.buscarFactorCores(child)) # Extend fusiona listas elemento a elemento
+        # Paso 3: devolvemos la lista de factorCore encontrados
+        return result
 
     # ###########################################################################
     # Inicio
@@ -59,6 +77,7 @@ class Escucha(compiladorListener):
     # Instrucciones de control
     def enterIfor(self, ctx): # Cuando se entra en un 'for'
         self.ts.addContexto()
+        # Esto genera la creación de 2 contextos anidados en for con llaves, pero no es bug: el contexto del for es necesario para variables declaradas en la inicialización y la implementación respeta el scope de las variables en C.
     
     # ------------ Eliminación de contextos ------------
     # Bloque estándar
@@ -70,6 +89,19 @@ class Escucha(compiladorListener):
         self.ts.delContexto()
 
     # ------------ Agregado de símbolos tipo Variable ------------
+    # Variable: (nombre, tipoDato, inicializado, usado)
+
+    def exitExpDEC(self, ctx: compiladorParser.ExpDECContext):
+        # expDEC: tipo ID inic listavar 
+
+        if any(isinstance(hijo, ErrorNode) for hijo in ctx.getChildren()):
+            # Si hay un error de sintaxis en la declaración, no tiene sentido seguir
+            return
+        
+    def exitOpal(self, ctx: compiladorParser.OpalContext):
+        factor_cores = self.buscarFactorCores(ctx)
+        for fc in factor_cores:
+            print("Factor encontrado:", fc.getText())
 
     # ------------ Agregado de símbolos tipo Funcion ------------
         # ToDo - No entra al TP3
@@ -78,5 +110,3 @@ class Escucha(compiladorListener):
     # Otros chequeos de semántica
     # ###########################################################################
 
-    def __str__(self):
-        pass

@@ -15,7 +15,9 @@ from Caminante import Caminante
 
 def main(argv):
     # Entradas de testing
-    archivo = "input/testerErroresSintacticos.txt"
+    # archivo = "input/testerErroresSintacticos.txt"
+    # archivo = "input/testerContextosYVar.txt"
+    archivo = "input/entradaSimple.txt"
 
     if len(argv) > 1 :
         archivo = argv[1]

@@ -23,11 +23,19 @@ def main(argv):
     lexer = compiladorLexer(input)
     stream = CommonTokenStream(lexer)
     parser = compiladorParser(stream)
+
+    # Eliminación del ErrorListener por defecto
+    parser.removeErrorListeners()
+    escuchaErroresSintacticos = EscuchaErroresSintacticos()
+    parser.addErrorListener(escuchaErroresSintacticos)
+
     escucha = Escucha()
     parser.addParseListener(escucha)
+
     tree = parser.programa()
-    visitante = Caminante()
-    visitante.visitPrograma(tree)
+
+    # visitante = Caminante()
+    # visitante.visitPrograma(tree)
     
     # print(escucha)
     # print(tree.toStringTree(recog=parser))

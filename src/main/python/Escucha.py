@@ -71,7 +71,7 @@ class Escucha(compiladorListener) :
         # Por esta razón, no podemos hacer una lectura que simplemente tome el tipoDato + nombre e inmediatamnete agregue el símbolo a la tabla.
 
         if any(isinstance(hijo, ErrorNode) for hijo in ctx.getChildren()):
-            # Si hay un ErrorNode el error se registró en visitErrorNode()
+            # Si hay un ErrorNode el error se registró con el EscuchaErroresSintacticos
             # No se puede procesar esta declaración, así que nos la saltamos
             return
 

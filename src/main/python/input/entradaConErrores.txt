@@ -1,6 +1,10 @@
 int x = 0, y, z
 double w, p;
 
+int j;
+
+x = j + 1;
+
 if ){
     w = p
 }
@@ -26,4 +30,5 @@ for(int i = 0; i < 10; i++){
     for(i = 0, int j = 0; ; ){
         j++;
     }
+
 }

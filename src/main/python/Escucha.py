@@ -213,7 +213,12 @@ class Escucha(compiladorListener) :
                 simbolo.setUsado()
                 if not simbolo.getInicializado():
                     self.registrarError(TipoError.SEMANTICO, f"Variable '{nombre}' usada sin inicializar.")
-                print(f"Variable usada: {nombre}")
 
+    def variableNoUtilizada(self):
+        ctx_actual = self.TS.contextos[-1]
+        for nombre, var in ctx_actual.simbolos.items():
+            if isinstance(var, Variable) and not var.getUsado():
+                self.registrarError(TipoError.SEMANTICO, f"Variable '{nombre}' declarada pero no utilizada.")
+        
     def __str__(self):
         pass

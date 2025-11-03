@@ -33,6 +33,8 @@ class Escucha(compiladorListener) :
         print(" ------ Comienza el parsing ------ ")
 
     def exitPrograma(self, ctx:compiladorParser.ProgramaContext):
+        self.buscarVariablesNoUsadas()
+    
         if self.huboErrores:
             with open("ContenidoTS.txt", "w") as f:
                 f.write("Imposible generar la TS: Se encontraron errores durante el parsing.\n")
@@ -214,10 +216,9 @@ class Escucha(compiladorListener) :
                 if not simbolo.getInicializado():
                     self.registrarError(TipoError.SEMANTICO, f"Variable '{nombre}' usada sin inicializar.")
 
-    def variableNoUtilizada(self):
-        ctx_actual = self.TS.contextos[-1]
-        for nombre, var in ctx_actual.simbolos.items():
-            if isinstance(var, Variable) and not var.getUsado():
+    def buscarVariablesNoUsadas(self):
+        for nombre, var in self.TS.historialCTX.items():
+            if not var.getUsado():
                 self.registrarError(TipoError.SEMANTICO, f"Variable '{nombre}' declarada pero no utilizada.")
         
     def __str__(self):

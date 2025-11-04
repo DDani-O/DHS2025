@@ -6,354 +6,343 @@ from tablaDeSimbolos.Funcion import Funcion
 from Enumeraciones import TipoError
 from antlr4 import ErrorNode
 
-class Escucha(compiladorListener) :
-    # Esta clase personalizada la creamos porque el Listener original se sobreescribe cada vez que se vuelve a generar el parser.
-    # Con esto podemos definir los metodos que nos interesen y que permanezcan.
-    
+
+class Escucha(compiladorListener):
     def __init__(self):
         super().__init__()
         self.TS = TS.getTS()
         self.huboErrores = False
-        self._in_declaracion = False
-        self._decl_pending = None
+        # bandera que indica que estamos procesando una declaracion
+        # para evitar reportar usos sin inicializar durante su propio parsing
+        self.leyendoDeclaracion = False
 
     # ------------------------------
-    # ---------- Utilidad ----------
+    # Utilidades
     # ------------------------------
-
-    def registrarError(self, tipo : TipoError, msj : str):
+    def registrarError(self, tipo: TipoError, msj: str):
+        # mantenemos la salida estilo CODIGOMAL
         self.huboErrores = True
-        print(f"ERROR {tipo}: {msj}")
+        # imprime con la etiqueta semántica como antes
+        print(f"ERROR SEMANTICO: {msj}")
 
-    # ----------------------------
-    # ---------- Inicio ----------
-    # ----------------------------
-
-    def enterPrograma(self, ctx:compiladorParser.ProgramaContext):
+    # ------------------------------
+    # Inicio / fin
+    # ------------------------------
+    def enterPrograma(self, ctx: compiladorParser.ProgramaContext):
         with open("ContenidoTS.txt", "w") as f:
-            pass  # Limpiamos el archivo viejo
+            pass
         print(" ------ Comienza el parsing ------ ")
 
-    def exitPrograma(self, ctx:compiladorParser.ProgramaContext):
+    def exitPrograma(self, ctx: compiladorParser.ProgramaContext):
+        # Al terminar, revisar variables no usadas
         self.buscarVariablesNoUsadas()
-    
+
         if self.huboErrores:
             with open("ContenidoTS.txt", "w") as f:
                 f.write("Imposible generar la TS: Se encontraron errores durante el parsing.\n")
         else:
-            # Imprimir la TS completa al finalizar el parsing
+            # imprimir tabla si no hubo errores
             self.TS.imprimirTS()
         print(" ------ Termina el parsing ------ ")
 
-    # -----------------------------------------
-    # ---------- Manejo de contextos ----------
-    # -----------------------------------------
-    # En C, la creación de contextos no se limita únicamente a contextos en bloques con llave, sino que también se crean contextos en estructuras de control y en funciones (esto lo tratamos en la sección de manejo de funciones).
-    # Esto implica que también tendríamos que considerar la creación y eliminación de contextos cuando las estructuras de control solo tienen una instrucción (sin llaves).
-    # No obstante, el profe nos limitó el alcance a solo bloques con llaves, por lo que no vamos a implementar este comportamiento adicional.
-
+    # ------------------------------
+    # Contextos (bloques y for)
+    # ------------------------------
     def enterBloque(self, ctx):
         self.TS.addContexto()
 
     def exitBloque(self, ctx):
         self.TS.delContexto()
 
-    def enterIfor(self, ctx): # Esto hay que hacerlo sí o sí porque el 'for' admite declaraciones en la sección init y no hacerlo provocaría que esas variables se carguen en el contexto global.
+    def enterIfor(self, ctx):
         self.TS.addContexto()
-        # Hacer esto provoca que se generen 2 contextos anidados en los 'for' con llaves. 
-        # No obstante, esto es correcto a nivel teórico (por el scope de las variables) y facilita la depuración.
 
     def exitIfor(self, ctx):
         self.TS.delContexto()
 
-    # -----------------------------------------
-    # ---------- Manejo de Variables ----------
-    # -----------------------------------------
-
+    # ------------------------------
+    # Declaraciones
+    # ------------------------------
     def enterDeclaracion(self, ctx: compiladorParser.DeclaracionContext):
-        # Cada vez que entramos a una declaración activamos la bandera y la lista de pendientes
-        self._in_declaracion = True
-        self._decl_pending = []
+        # activamos la bandera para no considerar como uso sin inicializar
+        # las referencias que formen parte de los inicializadores en la misma linea
+        self.leyendoDeclaracion = True
 
-    def exitDeclaracion(self, ctx:compiladorParser.DeclaracionContext):
-        # Una declaración es en realidad una lista de éstas, separadas por comas, que además pueden incluir una inicialización.
-        # Por esta razón, no podemos hacer una lectura que simplemente tome el tipoDato + nombre e inmediatamnete agregue el símbolo a la tabla.
-
-        if any(isinstance(hijo, ErrorNode) for hijo in ctx.getChildren()):
-            # Si hay un ErrorNode el error se registró con el EscuchaErroresSintacticos
-            # No se puede procesar esta declaración, así que nos la saltamos
-            # Limpiar bandera y pendientes por si acaso
-            self._in_declaracion = False
-            self._decl_pending = None
+    def exitDeclaracion(self, ctx: compiladorParser.DeclaracionContext):
+        # si hubo error de parseo en descendencia, salimos
+        if any(isinstance(h, ErrorNode) for h in ctx.getChildren()):
+            self.leyendoDeclaracion = False
             return
 
-        # --- Lectura de la instrucción ---
-        tipo = ctx.expDEC().tipo().getText() # Aparece una sola vez y es compartido por todas las declaraciones de la línea
+        # extraer tipo y lista textual (similar a CODIGOMAL original)
+        tipo = ctx.expDEC().tipo().getText()
+        raw = ctx.expDEC().getText()
+        rest = raw[len(tipo):].strip()
+        parts = [p.strip() for p in rest.split(',') if p.strip()]
 
-        # Desgloce de la instrucción
-        declaraciones = ctx.getText() # Cargamos TODOS los nodos del subárbol que conforman la declaración. Ej: declaraciones <-- "int x = 10, y, z = 0";
-        declaraciones = declaraciones.replace(tipo,'').replace(';','').strip() # Limpiamos la línea y nos quedamos únicamente con los nombres de las variables y las posibles inicializaciones, separadas por ','. Ej: declaraciones <-- "x = 10, y, z = 0"
-        declaraciones = [declaracion.strip() for declaracion in declaraciones.split(',')] # Convertimos el texto de las declaraciones en efectivamente una List de declaraciones, separando el texto orignal en las ','. Ej: declaraciones <-- ["x = 10", "y", "z = 0"]
+        # recolectar variables en orden izquierdo->derecho
+        vars_list = []  # tuplas: (nombre, tiene_inic, inic_text_or_ctx)
+        for part in parts:
+            if '=' in part:
+                nombre, valor = [t.strip() for t in part.split('=', 1)]
+                vars_list.append((nombre, True, valor))
+            else:
+                vars_list.append((part, False, None))
 
-        # --- Primer pase: registrar nombres (sin evaluar inicializadores) ---
-        # Llegados a este punto, tenemos una lista de declaraciones de variables, pero todavía NO sabemos si están inicializadas
-        # Además, hay que controlar si el símbolo ya estaba en la TS, en cuyo caso hay que reportar un error
-        for declaracion in declaraciones :
-            # Tenemos 2 tipos: inicializadas y no inicializadas
-            if '=' in declaracion : 
-                nombre, valor = [term.strip() for term in declaracion.split('=')] # No podemos usar '()' porque sería un generador
-                qInit = True
-            else :
-                nombre = declaracion.strip()
-                qInit = False # Redundante, pero no está demás ser explícito
-
-            # Verificación de que en el contexto actual aún se permitan declaraciones
-            contexto_actual = self.TS.contextos[-1]
-            if not contexto_actual.canDeclarar():
-                self.registrarError(TipoError.SEMANTICO, f"Declaraciones no permitidas en este punto ('{nombre}').")
-                continue
-
-            # Carga en la TS (vemos primero si ya existía)
-            if(self.TS.buscarSimboloContexto(nombre)) : # El símbolo ya existe
+        # primero: agregar todas las variables al contexto en orden
+        nuevas = []
+        for nombre, tiene_inic, inic in vars_list:
+            if self.TS.buscarSimboloContexto(nombre):
                 self.registrarError(TipoError.SEMANTICO, f"'{nombre}' ya existe en el contexto.")
-            else :
-                # Creación del símbolo
-                nuevaVar = Variable(nombre,tipo)
-                nuevaVar.inicializado = qInit
-                # Carga en la TS
-                self.TS.addSimbolo(nuevaVar)
+                continue
+            nueva = Variable(nombre, tipo)
+            # NO marcar inicializada aun; se hará despues de validar el inicializador
+            self.TS.addSimbolo(nueva)
+            nuevas.append((nueva, tiene_inic, inic))
 
-        # --- Segundo pase: resolver inicializadores aplazados (los que vinieron como expASIG dentro de la declaración) ---
-        if self._decl_pending:
-            for nombre, opal_ctx in self._decl_pending:
-                # opal_ctx es el sub-ctx de la expresión derecha que guardamos en exitExpASIG
-                try:
-                    valor = self.eval_opal(opal_ctx)
-                except Exception as e:
-                    self.registrarError(TipoError.SEMANTICO, f"Error al evaluar inicializador de '{nombre}': {e}")
-                    continue
 
-                simbolo = self.TS.buscarSimboloContexto(nombre) or self.TS.buscarSimbolo(nombre)
-                if simbolo is None:
-                    # Si por algún motivo no está, reportar (no debería pasar si primer pase funcionó)
-                    self.registrarError(TipoError.SEMANTICO, f"Uso de identificador no declarado '{nombre}'.")
-                    continue
-
-                # Asignar y marcar inicializado
-                try:
-                    self.TS.asignar(nombre, valor)
-                except Exception:
-                    # Ajustá según la API de TS; si no tenés asignar, hacé el set de valor en el objeto Simbolo
-                    simbolo.valor = valor
-
-                simbolo.setInicializado()
-
-        # limpiamos bandera y pendientes al salir de la declaración
-        self._in_declaracion = False
-        self._decl_pending = None
-
-        # Una vez procesadas las declaraciones de esta instrucción seguimos permitiendo declaraciones hasta que aparezca la primera instrucción que no sea una declaración.
-        # Este evento es detectado por exitInstruccion().
+        prev_flag = self.leyendoDeclaracion
+        self.leyendoDeclaracion = False
+        try:
+            for var, tiene_inic, inic in nuevas:
+                if tiene_inic and inic is not None:
+                    tipo_val = self._tipoExpFromTextOrCtx(inic)
+                    tipo_dest = var.getTipoDato()
+                    if tipo_val and not self._compatible(tipo_dest, tipo_val):
+                        self.registrarError(TipoError.SEMANTICO,
+                                            f"Tipo incompatible en inicializador de '{var.getNombre()}': se esperaba '{tipo_dest}', se obtuvo '{tipo_val}'.")
+                    else:
+                        var.setInicializado()
+        finally:
+            self.leyendoDeclaracion = prev_flag
 
     def enterInitialize(self, ctx: compiladorParser.InitializeContext):
-        # igual que enterDeclaracion: activar bandera y lista
-        self._in_declaracion = True
-        self._decl_pending = []
+        
+        self.leyendoDeclaracion = True
 
-    def exitInitialize(self, ctx:compiladorParser.InitializeContext):
-        """Procesa declaraciones dentro de la sección init del for. La gramática recoge las declaraciones como expDEC (sin el ';'), por lo que hay que crear los símbolos de otra forma."""
-        # Si no hay expDEC, no hay declaraciones, sino asignaciones
+    def exitInitialize(self, ctx: compiladorParser.InitializeContext):
         if ctx.expDEC() is None:
-            self._in_declaracion = False
-            self._decl_pending = None
+            self.leyendoDeclaracion = False
             return
-
-        # Si hay error sintáctico, no procesar
-        if any(isinstance(hijo, ErrorNode) for hijo in ctx.getChildren()):
-            self._in_declaracion = False
-            self._decl_pending = None
+        if any(isinstance(h, ErrorNode) for h in ctx.getChildren()):
+            self.leyendoDeclaracion = False
             return
 
         expdec = ctx.expDEC()
         tipo = expdec.tipo().getText()
+        raw = expdec.getText()
+        rest = raw[len(tipo):].strip()
+        parts = [p.strip() for p in rest.split(',') if p.strip()]
 
-        # Obtener el texto de la inicialización (p. ej. "int i = 0, j = 1") y procesar como en exitDeclaracion
-        declaraciones = expdec.getText()
-        declaraciones = declaraciones.replace(tipo, '').strip()
-        # listavar no contiene ';', así que las comas separan las declaraciones
-        declaraciones = [d.strip() for d in declaraciones.split(',') if d.strip()]
-
-        for declaracion in declaraciones:
-            if '=' in declaracion:
-                nombre, valor = [t.strip() for t in declaracion.split('=', 1)]
-                qInit = True
+        vars_list = []
+        for part in parts:
+            if '=' in part:
+                nombre, valor = [t.strip() for t in part.split('=', 1)]
+                vars_list.append((nombre, True, valor))
             else:
-                nombre = declaracion.strip()
-                qInit = False
+                vars_list.append((part, False, None))
 
-            contexto_actual = self.TS.contextos[-1]
-            if not contexto_actual.canDeclarar():
-                self.registrarError(TipoError.SEMANTICO, f"Declaraciones no permitidas en este punto ('{nombre}').")
-                continue
-
+        # agregar todos y despues evaluar inicializadores como en exitDeclaracion
+        nuevas = []
+        for nombre, tiene_inic, inic in vars_list:
             if self.TS.buscarSimboloContexto(nombre):
                 self.registrarError(TipoError.SEMANTICO, f"'{nombre}' ya existe en el contexto.")
-            else:
-                nuevaVar = Variable(nombre, tipo)
-                nuevaVar.inicializado = qInit
-                self.TS.addSimbolo(nuevaVar)
+                continue
+            nueva = Variable(nombre, tipo)
+            self.TS.addSimbolo(nueva)
+            nuevas.append((nueva, tiene_inic, inic))
 
-        # Resolver pendientes
-        if self._decl_pending:
-            for nombre, opal_ctx in self._decl_pending:
-                # opal_ctx es el sub-ctx de la expresión derecha que guardamos en exitExpASIG
-                try:
-                    valor = self.eval_opal(opal_ctx)
-                except Exception as e:
-                    self.registrarError(TipoError.SEMANTICO,
-                                        f"Error al evaluar inicializador de '{nombre}': {e}")
-                    continue
+        prev_flag = self.leyendoDeclaracion
+        self.leyendoDeclaracion = False
+        try:
+            for var, tiene_inic, inic in nuevas:
+                if tiene_inic and inic is not None:
+                    tipo_val = self._tipoExpFromTextOrCtx(inic)
+                    tipo_dest = var.getTipoDato()
+                    if tipo_val and not self._compatible(tipo_dest, tipo_val):
+                        self.registrarError(TipoError.SEMANTICO,
+                                            f"Tipo incompatible en inicializador de '{var.getNombre()}': se esperaba '{tipo_dest}', se obtuvo '{tipo_val}'.")
+                    else:
+                        var.setInicializado()
+        finally:
+            self.leyendoDeclaracion = prev_flag
 
-                simbolo = self.TS.buscarSimboloContexto(nombre) or self.TS.buscarSimbolo(nombre)
-                if simbolo is None:
-                    # Si por algún motivo no está, reportar (no debería pasar si primer pase funcionó)
-                    self.registrarError(TipoError.SEMANTICO, f"Uso de identificador no declarado '{nombre}'.")
-                    continue
-
-                # Asignar y marcar inicializado
-                try:
-                    self.TS.asignar(nombre, valor)
-                except Exception:
-                    # Ajustá según la API de TS; si no tenés asignar, hacé el set de valor en el objeto Simbolo
-                    simbolo.valor = valor
-
-                simbolo.setInicializado()
-
-        # limpiamos bandera y pendientes al salir de la declaración
-        self._in_declaracion = False
-        self._decl_pending = None
-
-        # Igual que en exitDeclaracion, las declaraciones siguen permitidas hasta la primera instrucción no declarativa.
-
-    def exitInstruccion(self, ctx:compiladorParser.InstruccionContext):
-        """Si la instrucción actual NO es una declaración, cerramos la posibilidad de declarar en el contexto actual (las declaraciones solo se permiten al principio)."""
-        # ANTLR genera una clase InstruccionContext con métodos para obtener el contexto (subárbol) de cada subregla que aparece como alternativa en la producción.
-        # Si la alternativa está presente en el árbol, el método correspondiente devuelve el contexto hijo; si no está presente, devuelve None.
-        if ctx.declaracion() is None: # Por lo explicado antes, esto controla si la instrucción es una declaración o no
-            if self.TS.contextos:
-                self.TS.contextos[-1].forbidDeclaraciones()
-
-
-    # ---------------------------
-    # ---------- Otros ----------
-    # ---------------------------
-
-    def exitExpASIG(self, ctx:compiladorParser.ExpASIGContext):
-        # expASIG : ID ASIG opal ;  -> verificar que la variable izquierda esté declarada
-        # Si hay ErrorNode, ignora
+    # ------------------------------
+    # Asignaciones fuera de declaracion
+    # ------------------------------
+    def exitExpASIG(self, ctx: compiladorParser.ExpASIGContext):
         if any(isinstance(hijo, ErrorNode) for hijo in ctx.getChildren()):
             return
 
         nombre = ctx.ID().getText()
 
-        # Si estamos dentro de una declaración, guardamos la asignación para evaluarla después
-        if getattr(self, "_in_declaracion", False):
-            # guardamos (nombre, opal_ctx) en pendientes
-            if self._decl_pending is None:
-                self._decl_pending = []
-            self._decl_pending.append((nombre, ctx.opal()))
-            # no hacemos más comprobaciones ahora
-            return
-
-        # comportamiento fuera de declaraciones: comprobaciones inmediatas
+        # Si estamos dentro de una declaracion manejada arriba, no usar este path
         simbolo = self.TS.buscarSimbolo(nombre)
         if simbolo is None:
             self.registrarError(TipoError.SEMANTICO, f"Uso de identificador no declarado '{nombre}'.")
             return
 
-        tipo_destino = simbolo.getTipoDato()
-        tipo_valor = self.tipoExp(ctx.opal())
-        
-        if tipo_valor and tipo_destino != tipo_valor:
-            self.registrarError(TipoError.SEMANTICO, f"Tipo incompatible en asignación a '{nombre}': se esperaba '{tipo_destino}', pero se obtuvo '{tipo_valor}'.")
+        tipo_dest = simbolo.getTipoDato()
+        tipo_val = self.tipoExp(ctx.opal())
+
+        if tipo_val and not self._compatible(tipo_dest, tipo_val):
+            self.registrarError(TipoError.SEMANTICO,
+                                f"Tipo incompatible en asignación a '{nombre}': se esperaba '{tipo_dest}', pero se obtuvo '{tipo_val}'.")
             return
-        
-        # Marcar como inicializada (por la asignación)
+
         simbolo.setInicializado()
 
-        self.tipoExp(ctx.opal())  # Evaluar la expresión para marcar variables usadas
-        
+        # Evaluar opal para marcar usos internos (si los hay)
+        try:
+            self.eval_opal(ctx.opal())
+        except Exception:
+            pass
 
-    def exitFactorCore(self, ctx:compiladorParser.FactorCoreContext):
-        # factorCore : NUMERO | ID | PA exp PC | llamadaFunc
-        # Aparece cuando se usa un ID en una expresión -- verificar existencia
+    # ------------------------------
+    # Uso de IDs en expresiones
+    # ------------------------------
+    def exitFactorCore(self, ctx: compiladorParser.FactorCoreContext):
         if any(isinstance(hijo, ErrorNode) for hijo in ctx.getChildren()):
             return
-        
-        # Si estamos en el pase de declaración, no comprobamos lecturas todavía
-        if getattr(self, "_in_declaracion", False):
-            return
 
-        # Si tiene ID como hijo
-        try:
-            id_token = ctx.ID()
-        except Exception:
-            id_token = None
-
-        if id_token is not None and id_token.getText() is not None:
-            nombre = id_token.getText()
+        if getattr(ctx, 'ID', None) and ctx.ID():
+            nombre = ctx.ID().getText()
             simbolo = self.TS.buscarSimbolo(nombre)
+            # Si estamos dentro de una declaración múltiple y todavía no se agregó
+            # el símbolo, NO reportamos 'no declarado' ahora, se valida luego.
             if simbolo is None:
-                self.registrarError(TipoError.SEMANTICO, f"Uso de identificador no declarado '{nombre}'.")
-                return
-            # Marcar como usada (lectura)
-            if not simbolo.getInicializado():
-                self.registrarError(TipoError.SEMANTICO, f"Variable '{nombre}' usada sin inicializar.")
+                if self.leyendoDeclaracion:
+                    return
+                else:
+                    self.registrarError(TipoError.SEMANTICO, f"Uso de identificador no declarado '{nombre}'.")
+                    return
+            # marcar usado
             simbolo.setUsado()
+            # si no esta inicializada y NO estamos analizando inicializadores de su propia declaracion
+            if not simbolo.getInicializado() and not self.leyendoDeclaracion:
+                self.registrarError(TipoError.SEMANTICO, f"Variable '{nombre}' usada sin inicializar.")
 
+    # ------------------------------
+    # Tipos en expresiones
+    # ------------------------------
     def tipoExp(self, ctx):
         if ctx is None:
             return None
-        
-        if hasattr(ctx, 'ID') and ctx.ID():
+
+        # casos hoja
+        if getattr(ctx, 'NUMERO', None) and ctx.NUMERO():
+            return 'int'
+
+        if getattr(ctx, 'ID', None) and ctx.ID():
             nombre = ctx.ID().getText()
-            var = self.buscarExistenciaVariable(nombre)
-            if var is None:
+            simbolo = self.TS.buscarSimbolo(nombre)
+            # Mismo comportamiento defensivo: si estamos dentro de una declaración,
+            # y el símbolo aún no existe, no reportamos 'no declarado' aquí.
+            if simbolo is None:
+                if self.leyendoDeclaracion:
+                    return None
+                self.registrarError(TipoError.SEMANTICO, f"Uso de identificador no declarado '{nombre}'.")
                 return None
-            var.setUsado()
-            if not var.getInicializado():
+            simbolo.setUsado()
+            if not simbolo.getInicializado() and not self.leyendoDeclaracion:
                 self.registrarError(TipoError.SEMANTICO, f"Variable '{nombre}' usada sin inicializar.")
-            return var.getTipoDato()
-        
-        if hasattr(ctx, 'NUMERO') and ctx.NUMERO():
-            return "int"
-        
+            return simbolo.getTipoDato()
+
+        # recursivo: combinar hijos
         tipos = set()
         for i in range(ctx.getChildCount()):
-            tipo_hijo = self.tipoExp(ctx.getChild(i))
-            if tipo_hijo:
-                tipos.add(tipo_hijo)
+            try:
+                t = self.tipoExp(ctx.getChild(i))
+            except Exception:
+                t = None
+            if t:
+                tipos.add(t)
 
         if len(tipos) == 1:
             return tipos.pop()
         elif len(tipos) > 1:
+            # permitir int + double -> double
+            if tipos == {'int', 'double'}:
+                return 'double'
             self.registrarError(TipoError.SEMANTICO, "Tipos incompatibles en la expresión.")
             return None
-        else:   
+        else:
             return None
-        
+
+    def _tipoExpFromTextOrCtx(self, inic):
+        # si nos pasan un ctx (ANTLR node) tratamos como antes
+        # detectamos si 'inic' tiene atributos parecidos a ctx
+        try:
+            if hasattr(inic, 'getText') and hasattr(inic, 'getChildCount'):
+                return self.tipoExp(inic)
+        except Exception:
+            pass
+
+        # si es string, analizamos
+        if isinstance(inic, str):
+            txt = inic
+            # numero con punto -> double
+            if txt.replace('.', '', 1).isdigit():
+                return 'double' if '.' in txt else 'int'
+            # si es un identificador simple, buscar simbolo
+            simbolo = self.TS.buscarSimbolo(txt)
+            if simbolo:
+                simbolo.setUsado()
+                if not simbolo.getInicializado() and not self.leyendoDeclaracion:
+                    self.registrarError(TipoError.SEMANTICO, f"Variable '{txt}' usada sin inicializar.")
+                return simbolo.getTipoDato()
+        return None
+
+    # ------------------------------
+    # Reglas de compatibilidad de tipos
+    # ------------------------------
+    def _compatible(self, tipo_dest, tipo_val):
+        # igual es compatible
+        if tipo_dest == tipo_val:
+            return True
+        # promoción int -> double permitida
+        if tipo_dest == 'double' and tipo_val == 'int':
+            return True
+        # sino incompatible
+        return False
+
+    # ------------------------------
+    # Evaluación liviana para valores constantes
+    # ------------------------------
+    def eval_opal(self, ctx):
+        try:
+            if getattr(ctx, 'NUMERO', None) and ctx.NUMERO():
+                return int(ctx.NUMERO().getText())
+
+            if getattr(ctx, 'ID', None) and ctx.ID():
+                return None
+
+            import re
+            text = ctx.getText()
+            if re.fullmatch(r"[0-9+\-*/%()\.\s]+", text):
+                return eval(text)
+            return None
+        except Exception:
+            return None
+
+    # ------------------------------
+    # Variables no usadas
+    # ------------------------------
     def buscarVariablesNoUsadas(self):
-        for index, contexto in enumerate(self.TS.historialCTX):
-            for nombre, simbolo in contexto.simbolos.items():
+        # si el TS tiene historial de contextos, lo usamos (igual que CODIGOMAL)
+        if not hasattr(self.TS, 'historialCTX'):
+            return
+        for contexto in self.TS.historialCTX:
+            for nombre, simbolo in list(contexto.simbolos.items()):
                 if not simbolo.getUsado():
                     self.registrarError(TipoError.SEMANTICO, f"Variable '{nombre}' declarada pero no utilizada.")
-    
+
     def buscarExistenciaVariable(self, nombre):
         simbolo = self.TS.buscarSimbolo(nombre)
         if simbolo is None:
             self.registrarError(TipoError.SEMANTICO, f"Uso de identificador no declarado '{nombre}'.")
             return None
         return simbolo
-    
+
     def __str__(self):
-        pass
+        return "Escucha (fase semántica)"

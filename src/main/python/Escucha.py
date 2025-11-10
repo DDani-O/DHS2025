@@ -101,20 +101,16 @@ class Escucha(compiladorListener):
             nuevas.append((nueva, tiene_inic, inic))
 
 
-        prev_flag = self.leyendoDeclaracion
         self.leyendoDeclaracion = False
-        try:
-            for var, tiene_inic, inic in nuevas:
-                if tiene_inic and inic is not None:
-                    tipo_val = self._tipoExpFromTextOrCtx(inic)
-                    tipo_dest = var.getTipoDato()
-                    if tipo_val and not self._compatible(tipo_dest, tipo_val):
-                        self.registrarError(TipoError.SEMANTICO,
-                                            f"Tipo incompatible en inicializador de '{var.getNombre()}': se esperaba '{tipo_dest}', se obtuvo '{tipo_val}'.")
-                    else:
-                        var.setInicializado()
-        finally:
-            self.leyendoDeclaracion = prev_flag
+        for var, tiene_inic, inic in nuevas:
+            if tiene_inic and inic is not None:
+                tipo_val = self._tipoExpFromTextOrCtx(inic)
+                tipo_dest = var.getTipoDato()
+                if tipo_val and not self._compatible(tipo_dest, tipo_val):
+                    self.registrarError(TipoError.SEMANTICO,
+                                        f"Tipo incompatible en inicializador de '{var.getNombre()}': se esperaba '{tipo_dest}', se obtuvo '{tipo_val}'.")
+                else:
+                    var.setInicializado()
 
     def enterInitialize(self, ctx: compiladorParser.InitializeContext):
         
@@ -152,20 +148,17 @@ class Escucha(compiladorListener):
             self.TS.addSimbolo(nueva)
             nuevas.append((nueva, tiene_inic, inic))
 
-        prev_flag = self.leyendoDeclaracion
+        
         self.leyendoDeclaracion = False
-        try:
-            for var, tiene_inic, inic in nuevas:
-                if tiene_inic and inic is not None:
-                    tipo_val = self._tipoExpFromTextOrCtx(inic)
-                    tipo_dest = var.getTipoDato()
-                    if tipo_val and not self._compatible(tipo_dest, tipo_val):
-                        self.registrarError(TipoError.SEMANTICO,
-                                            f"Tipo incompatible en inicializador de '{var.getNombre()}': se esperaba '{tipo_dest}', se obtuvo '{tipo_val}'.")
-                    else:
-                        var.setInicializado()
-        finally:
-            self.leyendoDeclaracion = prev_flag
+        for var, tiene_inic, inic in nuevas:
+            if tiene_inic and inic is not None:
+                tipo_val = self._tipoExpFromTextOrCtx(inic)
+                tipo_dest = var.getTipoDato()
+                if tipo_val and not self._compatible(tipo_dest, tipo_val):
+                    self.registrarError(TipoError.SEMANTICO,
+                                        f"Tipo incompatible en inicializador de '{var.getNombre()}': se esperaba '{tipo_dest}', se obtuvo '{tipo_val}'.")
+                else:
+                    var.setInicializado()
 
     # ------------------------------
     # Asignaciones fuera de declaracion
@@ -239,9 +232,6 @@ class Escucha(compiladorListener):
             # Mismo comportamiento defensivo: si estamos dentro de una declaración,
             # y el símbolo aún no existe, no reportamos 'no declarado' aquí.
             if simbolo is None:
-                if self.leyendoDeclaracion:
-                    return None
-                self.registrarError(TipoError.SEMANTICO, f"Uso de identificador no declarado '{nombre}'.")
                 return None
             simbolo.setUsado()
             if not simbolo.getInicializado() and not self.leyendoDeclaracion:

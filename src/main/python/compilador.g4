@@ -5,12 +5,14 @@ fragment DIGITO : [0-9] ;
 
 
 // ======= Definición de símbolos =======
+// Caracteres de agrupación
 PA : '(' ;
 PC : ')' ;
 LLA : '{' ;
 LLC : '}' ;
 PYC : ';' ;
 
+// Operadores lógicos
 IGUAL    : '==' ;
 DISTINTO :'!=' ;
 MAYOR    : '>' ;
@@ -21,6 +23,7 @@ AND      : '&&' ;
 OR       : '||' ;
 NOT      : '!' ;
 
+// Operadores aritméticos
 ASIG : '=' ;
 COMA : ',' ;
 SUMA : '+' ;
@@ -31,20 +34,28 @@ MULT : '*' ;
 DIV : '/' ;
 MOD : '%' ;
 
-NUMERO : DIGITO+ ;
-
 // Palabras reservadas
+// Tipos de datos
 INT : 'int' ;
-DOUBLE : 'double' ;
+FLOAT : 'float' ;
 CHAR : 'char' ;
 VOID : 'void' ;
 
+// Estructuras de control
 IF :    'if' ;
 ELSE :  'else' ;
 FOR :   'for' ;
 WHILE : 'while' ;
 
 RETURN : 'return' ;
+
+// Otros
+
+NUMERO : ENTERO
+       | DECIMAL
+       ;
+ENTERO : DIGITO+ ;
+DECIMAL : DIGITO+ '.' DIGITO+ ;
 
 ID : (LETRA | '_')(LETRA | DIGITO | '_')* ;
 
@@ -138,7 +149,7 @@ listStep : COMA step
 declaracion : expDEC PYC ;
 expDEC: tipo ID inic listavar ;
 tipo : INT
-     | DOUBLE
+     | FLOAT
      | CHAR
      | VOID
      ;
@@ -206,10 +217,13 @@ t : MULT factor t
   |
   ;
 
-factor : (NOT | INC | DEC)? factorSufix; 
+// Los factores pueden estar acompañados de operaciones unarias
+factor : (NOT | INC | DEC)? factorSufix; // Los postfijos tienen mayor precedencia que los prefijos
 factorSufix : factorCore (INC | DEC)? ;
 factorCore : NUMERO
            | ID
            | PA exp PC
            | llamadaFunc
            ;
+/* Esta definción permite construcciones inválidas, pero sigue la lógica de la ISO de C11.
+Aparentemente la mayoría de restricciones se aplican durante el análisis semántico. */

@@ -51,16 +51,6 @@ ID : (LETRA | '_')(LETRA | DIGITO | '_')* ;
 WS : [ \n\r\t] -> skip ;
 OTRO : . ;
 
-// s : ID     {print("ID ->" + $ID.text + "<--") }         s
-//   | NUMERO {print("NUMERO ->" + $NUMERO.text + "<--") } s
-//   | OTRO   {print("Otro ->" + $OTRO.text + "<--") }     s
-//   | EOF
-//   ;
-
-// s : PA s PC s
-//   |
-//   ;
-
 // ======= Estructura básica =======
 
 programa : instrucciones EOF ;
@@ -86,15 +76,19 @@ bloque : LLA instrucciones LLC ;
 // ======= Funciones =======
 
 // Prototipado
-prototipo : tipo ID PA listParamsProt? PC PYC ; // el '?' significa "0 o 1 veces"
-listParamsProt : parametroProt (COMA parametroProt)*;
+prototipo : tipo ID PA listParamsProt PC PYC ;
+listParamsProt : parametroProt (COMA parametroProt)*
+               |
+               ;
 parametroProt : tipo
               | tipo ID // en los prototipos, el nombre es opcional
               ;
 
 // Definición
-funcion : tipo ID PA listParamsDef? PC bloque ;
-listParamsDef : parametroDef (COMA parametroDef)* ;
+funcion : tipo ID PA listParamsDef PC bloque ; 
+listParamsDef : parametroDef (COMA parametroDef)*
+              |
+              ;
 parametroDef : tipo ID; // en una definición, el nombre es obligatorio
 
 ireturn : RETURN opal PYC 
@@ -102,8 +96,10 @@ ireturn : RETURN opal PYC
         ;
 
 // Llamada
-llamadaFunc : ID PA listArgs? PC ;
-listArgs : opal (COMA opal)* ; // las llamadas a funciones están presentes como factores en las operaciones
+llamadaFunc : ID PA listArgs PC ;
+listArgs : opal (COMA opal)*
+         |
+         ;
 
 // ======= Instrucciones de control =======
 

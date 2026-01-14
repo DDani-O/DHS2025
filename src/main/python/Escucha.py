@@ -16,6 +16,8 @@ class Escucha(compiladorListener):
         self.ts = TS.getTS()  # Obtener la instancia de la tabla de símbolos
         self.huboErrores = False  # Bandera para indicar si hubo errores semánticos
         # Los errores sintácticos se manejan en EscuchaErroresSintacticos
+        self.leyendoDeclaracion = False # Bandera para evitar reporte de "uso sin inicializar" en exitFactorCore durante la lectura de declaraciones
+        self.stackFactores = [] # Pila para almacenar los factores encontrados durante el análisis de una declaración
 
     def __str__(self):
         pass
@@ -28,6 +30,13 @@ class Escucha(compiladorListener):
         """Recibe un mensaje de error y lo imprime por consola. Además, marca que hubo errores en la compilación."""
         self.huboErrores = True
         print(f"ERROR {tipo}: {msj}")
+
+    def comprobarExistenciaSimbolo(self, nombre: str):
+        simbolo = self.ts.buscarSimbolo(nombre)
+        if(simbolo is None):
+            self.registrarError(TipoError.SEMANTICO, f"La variable '{nombre}'no existe.")
+        else:
+            simbolo.setUsado()
 
     def obtenerTipoDato(self, expresion: str) -> str:
         pass
@@ -48,7 +57,7 @@ class Escucha(compiladorListener):
     #             result.extend(self.buscarFactorCores(child)) # Extend fusiona listas elemento a elemento
     #     # Paso 3: devolvemos la lista de factorCore encontrados
     #     return result
-
+    
     # ###########################################################################
     # Inicio
     # ###########################################################################
@@ -93,10 +102,15 @@ class Escucha(compiladorListener):
     # Instrucciones de control
     def exitIfor(self, ctx): # Cuando se sale de un 'for'
         self.ts.delContexto()
-
+    
     # ------------ Agregado de símbolos tipo Variable ------------
     # Variable: (nombre, tipoDato, inicializado, usado)
 
+    def enterExpDEC(self, ctx: compiladorParser.ExpDECContext):
+        # Activamos la bandera para no considerar como uso sin inicializar las referencias que formen parte de los inicializadores en la misma linea
+        self.leyendoDeclaracion = True
+        self.stackFactores.clear() # Limpiamos la pila de factores antes de empezar a leer la declaración
+        
     def exitExpDEC(self, ctx: compiladorParser.ExpDECContext):
         # expDEC: tipo ID inic listavar 
 
@@ -126,10 +140,12 @@ class Escucha(compiladorListener):
                 self.registrarError(TipoError.SEMANTICO, f"La variable '{nombre}' ya fue declarada en este contexto.")
                 continue # Pasamos a la siguiente sin agregar nada a la TS
             
-            # # 3ro) Controlamos el inicializador
-            # if(inicializada):
-            #     # 3.1) Chequeamos la existencia de variables usadas en el inicializador
-
+            # 3ro) Controlamos el inicializador
+            if(inicializada):
+                # 3.1) Chequeamos la existencia de variables usadas en el inicializador
+                for factor in self.stackFactores:
+                    self.comprobarExistenciaSimbolo(factor)
+                    
             #     # 3.2) Chequeamos compatibilidad de tipos
             #     tipo_inicializador = self.obtenerTipoDato(inicializador)
             #     if not self.tiposCompatibles(tipo_dato, tipo_inicializador):
@@ -141,6 +157,8 @@ class Escucha(compiladorListener):
             if(inicializada):
                 nueva_variable.setInicializado()
             self.ts.addSimbolo(nueva_variable)
+            
+        self.leyendoDeclaracion = False # Desactivamos la bandera luego de procesar toda la instrucción
 
     # ------------ Agregado de símbolos tipo Funcion ------------
     # Funcion: (nombre, tipoDato, args: Optional, inicializado, usado)
@@ -156,3 +174,19 @@ class Escucha(compiladorListener):
     #     factor_cores = self.buscarFactorCores(ctx)
     #     for fc in factor_cores:
     #         print("Factor encontrado:", fc.getText())
+
+    def exitFactorCore(self, ctx: compiladorParser.FactorCoreContext):
+
+        # Chequeo de uso de variables (IDs) en el término de la DERECHA
+        if ctx.ID(): # Si el factor es un ID
+            nombre_id = ctx.ID().getText()
+            if not self.leyendoDeclaracion:
+                self.comprobarExistenciaSimbolo(nombre_id)
+            else:
+                self.stackFactores.append(nombre_id)
+
+    def exitExpASIG(self, ctx: compiladorParser.ExpASIGContext):
+        
+        # Chequeo de uso de variables (IDs) en el término de la IZQUIERDA
+        nombre_id = ctx.ID().getText()
+        self.comprobarExistenciaSimbolo(nombre_id)

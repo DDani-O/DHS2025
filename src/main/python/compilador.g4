@@ -39,6 +39,7 @@ MOD : '%' ;
 INT : 'int' ;
 FLOAT : 'float' ;
 CHAR : 'char' ;
+BOOL : 'bool' ;
 VOID : 'void' ;
 
 // Estructuras de control
@@ -50,6 +51,8 @@ WHILE : 'while' ;
 RETURN : 'return' ;
 
 // Otros
+
+CARACTER : '\'' LETRA '\'' ;
 
 NUMERO : ENTERO
        | DECIMAL
@@ -151,6 +154,7 @@ expDEC: tipo ID inic listavar ;
 tipo : INT
      | FLOAT
      | CHAR
+     | BOOL
      | VOID
      ;
 
@@ -221,6 +225,7 @@ t : MULT factor t
 factor : (NOT | INC | DEC)? factorSufix; // Los postfijos tienen mayor precedencia que los prefijos
 factorSufix : factorCore (INC | DEC)? ;
 factorCore : NUMERO
+           | CARACTER
            | ID
            | PA exp PC
            | llamadaFunc

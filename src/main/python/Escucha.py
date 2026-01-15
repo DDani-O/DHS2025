@@ -6,6 +6,7 @@ from tablaDeSimbolos.Context import Contexto
 from tablaDeSimbolos.Variable import Variable
 
 from Enumeraciones import TipoError
+from Enumeraciones import CType
 from EscuchaErroresSintacticos import EscuchaErroresSintacticos # Nos hace falta saber si hubo errores sintácticos para no imprimir la TS cuando salimos del programa
 from antlr4 import ErrorNode, ParserRuleContext 
 
@@ -31,19 +32,41 @@ class Escucha(compiladorListener):
         self.huboErrores = True
         print(f"ERROR {tipo}: {msj}")
 
-    def comprobarExistenciaSimbolo(self, nombre: str):
+    def comprobarExistenciaSimbolo(self, nombre: str) -> bool:
+        """Recibe el nombre de un símbolo y verifica si existe en la TS. Si no existe, registra un error semántico. Devuelve True si existe, False en caso contrario."""
         simbolo = self.ts.buscarSimbolo(nombre)
         if(simbolo is None):
             self.registrarError(TipoError.SEMANTICO, f"La variable '{nombre}'no existe.")
+            return False
         else:
             simbolo.setUsado()
+            return True
 
-    def obtenerTipoDato(self, expresion: str) -> str:
-        pass
+    def obtenerTipoResultante(self, ctx: ParserRuleContext) -> CType:
+        """Recibe una expresión en forma de contexto y devuelve el tipo de dato correspondiente como CType."""
+        
+        rama_derecha = ctx.getChild(1) # Puede derivar en vacío
+        if rama_derecha.getChildCount() == 0 : # Si tiene un solo hijo no vacío, retorna su valor
+            return ctx.getChild(0).tipo
+        else: # Más de un hijo no vacío, tenemos que evaluar el tipo resultante
+            tipoResultante = ctx.getChild(0).tipo
+            while rama_derecha.getChildCount() > 0:
+                tipo_leido = rama_derecha.getChild(1).tipo
+                tipoResultante = self.combinarTipos(tipoResultante, tipo_leido)
+                rama_derecha = rama_derecha.getChild(2) # Avanzamos al siguiente nodo derecho
 
-    def tiposCompatibles(self, tipo1: str, tipo2: str) -> bool:
-        pass
-    
+    def combinarTipos(self, tipo1: CType, tipo2: CType) -> CType:
+        """Recibe dos tipos de datos y devuelve el tipo resultante de su combinación, según las reglas definidas."""
+        if tipo1 == CType.UNDETERMINED or tipo2 == CType.UNDETERMINED:
+            return CType.UNDETERMINED
+        if tipo1 == CType.VOID or tipo2 == CType.VOID:
+            self.registrarError(TipoError.SEMANTICO, "Operación inválida con tipo 'void'.")
+            return CType.UNDETERMINED
+        if tipo1 > tipo2:
+            return tipo1
+        else:
+            return tipo2
+        
     # def buscarFactorCores(self, ctx: ParserRuleContext):
     #     """Recorre recursivamente el subárbol sintáctico a partir del contexto que se le pase y devuelve una lista con todos los nodos FactorCoreContext encontrados."""
     #     result = [] # Acumula los FactorCores encontrados
@@ -142,15 +165,8 @@ class Escucha(compiladorListener):
             
             # 3ro) Controlamos el inicializador
             if(inicializada):
-                # 3.1) Chequeamos la existencia de variables usadas en el inicializador
                 for factor in self.stackFactores:
                     self.comprobarExistenciaSimbolo(factor)
-                    
-            #     # 3.2) Chequeamos compatibilidad de tipos
-            #     tipo_inicializador = self.obtenerTipoDato(inicializador)
-            #     if not self.tiposCompatibles(tipo_dato, tipo_inicializador):
-            #         self.registrarError(TipoError.SEMANTICO, f"Incompatibilidad de tipos al inicializar la variable '{nombre}'. Se esperaba un valor de tipo '{tipo_dato}' pero se recibió '{tipo_inicializador}'.")
-            #         continue # Pasamos a la siguiente sin agregar nada a la TS
             
             # 4to) Creamos el símbolo y lo integramos a la TS
             nueva_variable = Variable(nombre, tipo_dato)
@@ -169,11 +185,12 @@ class Escucha(compiladorListener):
     # ###########################################################################
     # Otros chequeos de semántica
     # ###########################################################################
-
-    # def exitOpal(self, ctx: compiladorParser.OpalContext):
-    #     factor_cores = self.buscarFactorCores(ctx)
-    #     for fc in factor_cores:
-    #         print("Factor encontrado:", fc.getText())
+    
+    def exitExpASIG(self, ctx: compiladorParser.ExpASIGContext):
+        
+        # Chequeo de uso de variables (IDs) en el término de la IZQUIERDA
+        nombre_id = ctx.ID().getText()
+        self.comprobarExistenciaSimbolo(nombre_id)
 
     def exitFactorCore(self, ctx: compiladorParser.FactorCoreContext):
 
@@ -181,12 +198,51 @@ class Escucha(compiladorListener):
         if ctx.ID(): # Si el factor es un ID
             nombre_id = ctx.ID().getText()
             if not self.leyendoDeclaracion:
-                self.comprobarExistenciaSimbolo(nombre_id)
+                if(self.comprobarExistenciaSimbolo(nombre_id)):
+                    ctx.tipo = self.ts.buscarSimbolo(nombre_id).getTipo() # Asignamos el tipo del ID al contexto actual
+                else:
+                    ctx.tipo = CType.UNDETERMINED # Tipo indeterminado si no existe el símbolo
             else:
                 self.stackFactores.append(nombre_id)
-
-    def exitExpASIG(self, ctx: compiladorParser.ExpASIGContext):
         
-        # Chequeo de uso de variables (IDs) en el término de la IZQUIERDA
-        nombre_id = ctx.ID().getText()
-        self.comprobarExistenciaSimbolo(nombre_id)
+        # Asignación de tipo a literales y expresiones
+        if ctx.NUMERO():
+            ctx.tipo = CType.FLOAT if '.' in ctx.NUMERO().getText() else CType.INT
+        if ctx.CARACTER():
+            ctx.tipo = CType.CHAR
+        if ctx.PA():
+            ctx.tipo = ctx.exp().tipo # El tipo de dato de una expresión entre paréntesis es el tipo de dato de la expresión misma
+        if ctx.llamadaFunc():
+            pass
+        
+    def exitFactor(self, ctx: compiladorParser.FactorContext):
+        # Propagación del tipo desde el FactorCore al Factor
+        ctx.tipo = ctx.factorCore().tipo
+        
+    def exitTerm(self, ctx: compiladorParser.TermContext):
+        # Propagación del tipo desde los factores al término
+        ctx.tipo = self.obtenerTipoResultante(ctx)
+        
+    def exitExp(self, ctx: compiladorParser.ExpContext):
+        # Propagación del tipo desde los términos a la expresión
+        ctx.tipo = self.obtenerTipoResultante(ctx)
+        
+    def exitExpCOMP(self, ctx: compiladorParser.ExpCOMPContext):
+        # Propagación del tipo desde las expresiones a la expresión de comparación
+        ctx.tipo = self.obtenerTipoResultante(ctx)
+        
+    def exitExpIGUALDAD(self, ctx: compiladorParser.ExpIGUALDADContext):
+        # Propagación del tipo desde las expresiones de comparación a la expresión de igualdad
+        ctx.tipo = self.obtenerTipoResultante(ctx)
+        
+    def exitExpAND(self, ctx: compiladorParser.ExpANDContext):
+        # Propagación del tipo desde las expresiones igualdad a la expresión AND
+        ctx.tipo = self.obtenerTipoResultante(ctx)
+        
+    def exitExpOR(self, ctx: compiladorParser.ExpORContext):
+        # Propagación del tipo desde las expresiones AND a la expresión OR
+        ctx.tipo = self.obtenerTipoResultante(ctx)
+
+    def exitOpal(self, ctx: compiladorParser.OpalContext):
+        # Propagación del tipo desde el hijo único al nodo de la operación
+        ctx.tipo = ctx.getChild(0).tipo

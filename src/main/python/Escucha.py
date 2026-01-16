@@ -12,10 +12,11 @@ from antlr4 import ErrorNode, ParserRuleContext
 
 class Escucha(compiladorListener):
 
-    def __init__(self):
+    def __init__(self, escuchaErroresSintacticos):
         super().__init__()
         self.ts = TS.getTS()  # Obtener la instancia de la tabla de símbolos
         self.huboErrores = False  # Bandera para indicar si hubo errores semánticos
+        self.escuchaErroresSintacticos = escuchaErroresSintacticos
         # Los errores sintácticos se manejan en EscuchaErroresSintacticos
         self.leyendoDeclaracion = False # Bandera para evitar reporte de "uso sin inicializar" en exitFactorCore durante la lectura de declaraciones
         self.stackFactores = [] # Pila para almacenar los factores encontrados durante el análisis de una declaración
@@ -36,7 +37,7 @@ class Escucha(compiladorListener):
         """Recibe el nombre de un símbolo y verifica si existe en la TS. Si no existe, registra un error semántico. Devuelve True si existe, False en caso contrario."""
         simbolo = self.ts.buscarSimbolo(nombre)
         if(simbolo is None):
-            self.registrarError(TipoError.SEMANTICO, f"La variable '{nombre}'no existe.")
+            self.registrarError(TipoError.SEMANTICO, f"La variable '{nombre}' no existe.")
             return False
         else:
             simbolo.setUsado()
@@ -54,6 +55,7 @@ class Escucha(compiladorListener):
                 tipo_leido = rama_derecha.getChild(1).tipo
                 tipoResultante = self.combinarTipos(tipoResultante, tipo_leido)
                 rama_derecha = rama_derecha.getChild(2) # Avanzamos al siguiente nodo derecho
+            return tipoResultante
 
     def combinarTipos(self, tipo1: CType, tipo2: CType) -> CType:
         """Recibe dos tipos de datos y devuelve el tipo resultante de su combinación, según las reglas definidas."""
@@ -96,7 +98,7 @@ class Escucha(compiladorListener):
         # self.buscarVariablesNoUsadas()
     
         # Tenemos que imprimir la TS solo si no hubo errores sintácticos ni semánticos
-        if self.huboErrores or EscuchaErroresSintacticos.errores: # Lista NO vacía = True
+        if self.huboErrores or self.escuchaErroresSintacticos.errores: # Lista NO vacía = True
             with open("ContenidoTS.txt", "w") as f:
                 f.write("Imposible generar la TS: Se encontraron errores durante el parsing.\n")
         else: # Si no hubieron errores, imprimimos la TS
@@ -167,6 +169,7 @@ class Escucha(compiladorListener):
             if(inicializada):
                 for factor in self.stackFactores:
                     self.comprobarExistenciaSimbolo(factor)
+            self.stackFactores.clear() # Limpiamos la pila de factores para la próxima declaración
             
             # 4to) Creamos el símbolo y lo integramos a la TS
             tipo_dato = CType.fromStr(ctx.tipo().getText())
@@ -195,6 +198,9 @@ class Escucha(compiladorListener):
 
     def exitFactorCore(self, ctx: compiladorParser.FactorCoreContext):
 
+        # Tipo por defecto (CLAVE)
+        ctx.tipo = CType.UNDETERMINED
+        
         # Chequeo de uso de variables (IDs) en el término de la DERECHA
         if ctx.ID(): # Si el factor es un ID
             nombre_id = ctx.ID().getText()

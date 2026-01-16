@@ -31,7 +31,7 @@ def main(argv):
     escuchaErroresSintacticos = EscuchaErroresSintacticos()
     parser.addErrorListener(escuchaErroresSintacticos)
 
-    escucha = Escucha()
+    escucha = Escucha(escuchaErroresSintacticos)
     parser.addParseListener(escucha)
 
     tree = parser.programa()

@@ -62,7 +62,7 @@ class Escucha(compiladorListener):
         if tipo1 == CType.VOID or tipo2 == CType.VOID:
             self.registrarError(TipoError.SEMANTICO, "Operación inválida con tipo 'void'.")
             return CType.UNDETERMINED
-        if tipo1 > tipo2:
+        if tipo1.rank > tipo2.rank:
             return tipo1
         else:
             return tipo2
@@ -169,6 +169,7 @@ class Escucha(compiladorListener):
                     self.comprobarExistenciaSimbolo(factor)
             
             # 4to) Creamos el símbolo y lo integramos a la TS
+            tipo_dato = CType.fromStr(ctx.tipo().getText())
             nueva_variable = Variable(nombre, tipo_dato)
             if(inicializada):
                 nueva_variable.setInicializado()
@@ -199,7 +200,7 @@ class Escucha(compiladorListener):
             nombre_id = ctx.ID().getText()
             if not self.leyendoDeclaracion:
                 if(self.comprobarExistenciaSimbolo(nombre_id)):
-                    ctx.tipo = self.ts.buscarSimbolo(nombre_id).getTipo() # Asignamos el tipo del ID al contexto actual
+                    ctx.tipo = self.ts.buscarSimbolo(nombre_id).getTipoDato() # Asignamos el tipo del ID al contexto actual
                 else:
                     ctx.tipo = CType.UNDETERMINED # Tipo indeterminado si no existe el símbolo
             else:
@@ -217,7 +218,7 @@ class Escucha(compiladorListener):
         
     def exitFactor(self, ctx: compiladorParser.FactorContext):
         # Propagación del tipo desde el FactorCore al Factor
-        ctx.tipo = ctx.factorCore().tipo
+        ctx.tipo = ctx.factorSufix().factorCore().tipo
         
     def exitTerm(self, ctx: compiladorParser.TermContext):
         # Propagación del tipo desde los factores al término

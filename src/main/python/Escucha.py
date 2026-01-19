@@ -3,6 +3,7 @@ from compiladorListener import compiladorListener
 
 from tablaDeSimbolos.SymbolTable import TS
 from tablaDeSimbolos.Context import Contexto
+from tablaDeSimbolos.Funcion import Funcion
 from tablaDeSimbolos.Variable import Variable
 
 from Enumeraciones import TipoError
@@ -20,7 +21,8 @@ class Escucha(compiladorListener):
         # Los errores sintácticos se manejan en EscuchaErroresSintacticos
         self.leyendoDeclaracion = False # Bandera para evitar reporte de "uso sin inicializar" en exitFactorCore durante la lectura de declaraciones
         self.stackFactores = [] # Pila para almacenar los factores encontrados durante el análisis de una declaración
-
+        self.stackLlamadas = [] # Pila para almacenar las llamadas a funciones
+    
     def __str__(self):
         pass
 
@@ -69,19 +71,21 @@ class Escucha(compiladorListener):
         else:
             return tipo2
         
-    # def buscarFactorCores(self, ctx: ParserRuleContext):
-    #     """Recorre recursivamente el subárbol sintáctico a partir del contexto que se le pase y devuelve una lista con todos los nodos FactorCoreContext encontrados."""
-    #     result = [] # Acumula los FactorCores encontrados
-    #     # Paso 1: verificamos si el context actual es factorCore
-    #     if isinstance(ctx, compiladorParser.FactorCoreContext):
-    #         result.append(ctx) # Si encontramos un FactorCore, lo agregamos a la lista
-    #     # Paso 2: recorremos todos los hijos del context
-    #     for child in ctx.getChildren():
-    #         if isinstance(child, ParserRuleContext):
-    #             # Llamada recursiva: exploramos los descendientes y nos traemos los FactorCores que encontremos
-    #             result.extend(self.buscarFactorCores(child)) # Extend fusiona listas elemento a elemento
-    #     # Paso 3: devolvemos la lista de factorCore encontrados
-    #     return result
+    def obtenerTiposParams(self, ctx, nombre_funcion: str):
+        """Recibe el contexto (nodo) de una lista de parámetros y devuelve una lista con los tipos de datos de cada parámetro como CType. En caso de error, devuelve None."""
+        lista_tipos = []
+        if ctx.getChildCount() > 0: # Si la lista de parámetros NO deriva en vacío
+            if ctx.getText() == 'void': # Ej: f(void)
+                lista_tipos.append(CType.VOID)
+            elif 'void' in ctx.getText(): # Ej: f(int, void) o f(void, int)
+                self.registrarError(TipoError.SEMANTICO, f"La función '{nombre_funcion}' tiene una declaración de parámetros inválida con 'void'.")
+            else: # Ej: f(int, char, float)
+                for i in range(ctx.getChildCount() // 2 + 1):
+                    tipo_param = ctx.getChild(2*i).tipo().getText() # Los tipos están en los hijos pares (0,2,4,...)
+                    lista_tipos.append(CType.fromStr(tipo_param))
+        else: # Ej: f()
+            lista_tipos.append(CType.VOID) # Si no hay parámetros explícitos, se asume void
+        return lista_tipos
     
     # ###########################################################################
     # Inicio
@@ -182,10 +186,75 @@ class Escucha(compiladorListener):
 
     # ------------ Agregado de símbolos tipo Funcion ------------
     # Funcion: (nombre, tipoDato, args: Optional, inicializado, usado)
-        
+    
     def exitPrototipo(self, ctx: compiladorParser.PrototipoContext):
-        pass
+        # prototipo: tipo ID PA listaparam PA
+        
+        if any(isinstance(hijo, ErrorNode) for hijo in ctx.getChildren()):
+            # Si hay un error de sintaxis en el prototipo, no tiene sentido seguir
+            return
+        
+        nombre_funcion = ctx.ID().getText()
 
+        if len(self.ts.contextos) != 1: # Vemos si estamos en el contexto global (único permitido para funciones)
+            self.registrarError(TipoError.SEMANTICO, f"La función '{nombre_funcion}' solo puede ser declarada en el contexto global.")
+            return  # Salimos sin agregar nada a la TS
+        if self.ts.buscarSimbolo("main"): # Vemos si se está intentando prototipar después de main (inválido)
+            self.registrarError(TipoError.SEMANTICO, f"La función '{nombre_funcion}' no puede ser prototipada después de 'main'.")
+            return  # Salimos sin agregar nada a la TS
+        if nombre_funcion == "main": # Vemos si se está intentando prototipar main (inválido)
+            self.registrarError(TipoError.SEMANTICO, "La función 'main' no puede ser prototipada.")
+            return  # Salimos sin agregar nada a la TS
+        if(self.ts.buscarSimbolo(nombre_funcion)):
+            self.registrarError(TipoError.SEMANTICO, f"La función '{nombre_funcion}' ya fue declarada.")
+            return # Salimos sin agregar nada a la TS
+
+        tipo_retorno = CType.fromStr(ctx.tipo().getText())
+        lista_tipos = self.obtenerTiposParams(ctx.getChild(3), nombre_funcion) # El nodo de la lista es el hijo 3
+        if lista_tipos is None:
+            return # Hubo un error al procesar los parámetros, salimos sin agregar nada a la TS  
+        nueva_funcion = Funcion(nombre_funcion, tipo_retorno, lista_tipos)
+        self.ts.addSimbolo(nueva_funcion)
+
+    def exitFuncion(self, ctx: compiladorParser.FuncionContext):
+        # funcion : tipo ID PA listParamsDef PC bloque ; 
+
+        if any(isinstance(hijo, ErrorNode) for hijo in ctx.getChildren()):
+            # Si hay un error de sintaxis en la función, no tiene sentido seguir
+            return
+        
+        nombre_funcion = ctx.ID().getText()
+        existente = self.ts.buscarSimbolo(nombre_funcion)
+
+        if len(self.ts.contextos) != 1: # Vemos si estamos en el contexto global (único permitido para funciones)
+            self.registrarError(TipoError.SEMANTICO, f"La función '{nombre_funcion}' solo puede ser declarada en el contexto global.")
+            return  # Salimos sin agregar nada a la TS
+        if self.ts.buscarSimbolo("main"): # Estamos después de main
+            if not existente: # Y la función no existe ==> No fue prototipada ==> Error
+                self.registrarError(TipoError.SEMANTICO, f"La función '{nombre_funcion}' no fue prototipada.")
+                return
+        if existente is not None: # La función ya existe en la TS ==> Existe un prototipo || Ya fue definida
+            if existente.getInicializado(): # Inicializada == True ==> Ya fue definida (existe un cuerpo) ==> Error
+                self.registrarError(TipoError.SEMANTICO, f"La función '{nombre_funcion}' ya fue definida.")
+                return
+
+        tipo_retorno = CType.fromStr(ctx.tipo().getText())
+        lista_tipos = self.obtenerTiposParams(ctx.getChild(3), nombre_funcion)
+        if lista_tipos is None:
+            return
+        if existente is not None: 
+            if tipo_retorno != existente.getTipoDato() or lista_tipos != existente.getListaArgs():
+                self.registrarError(TipoError.SEMANTICO, f"La definición de la función '{nombre_funcion}' no coincide con su prototipo.")
+                return
+            existente.setInicializado()
+            return
+        nueva_funcion = Funcion(nombre_funcion, tipo_retorno, lista_tipos)
+        nueva_funcion.setInicializado()
+        self.ts.addSimbolo(nueva_funcion)
+
+    def exitLlamadaFunc(self, ctx: compiladorParser.LlamadaFuncContext):
+        self.stackLlamadas.append(ctx) # Guardamos la llamada para procesarla al final
+        
     # ###########################################################################
     # Otros chequeos de semántica
     # ###########################################################################

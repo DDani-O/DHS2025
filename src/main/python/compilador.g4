@@ -101,6 +101,7 @@ parametroProt : tipo
 // Definición
 funcion : tipo ID PA listParamsDef PC bloque ; 
 listParamsDef : parametroDef (COMA parametroDef)*
+              | VOID
               |
               ;
 parametroDef : tipo ID; // en una definición, el nombre es obligatorio

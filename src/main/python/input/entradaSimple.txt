@@ -1,1 +1,14 @@
-int a = 1, b = c, d = e, f = 1;
+int func(void);
+
+int func2(void){
+
+}
+
+int main(){
+
+}
+
+int func(){
+    
+}
+

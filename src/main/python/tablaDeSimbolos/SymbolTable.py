@@ -88,7 +88,7 @@ class TS:
                     if isinstance(simbolo, Variable):
                         argumentos = "N/A"
                     else:
-                        argumentos = ', '.join([arg.tipoDato for arg in simbolo.getListaArgs()]) if simbolo.getListaArgs() else "void" # Aplicamos condicional ternario para que el código quede más limpio nomás
+                        argumentos = ', '.join([arg.text for arg in simbolo.getListaArgs()]) if simbolo.getListaArgs() else "void" # Aplicamos condicional ternario para que el código quede más limpio nomás
 
                     # Imprimir los datos del símbolo
                     f.write(f"{prefijo}{nombre:<20} {str(tipo):<12} {str(inicializado):<12} {str(usado):<6} {argumentos}\n")

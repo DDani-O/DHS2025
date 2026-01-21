@@ -98,9 +98,9 @@ class Escucha(compiladorListener):
                 for i in range(ctx.getChildCount() // 2 + 1):
                     tipo_param = ctx.getChild(2*i).tipo().getText() # Los tipos están en los hijos pares (0,2,4,...)
                     nombre_param = ctx.getChild(2*i).ID().getText() if ctx.getChild(2*i).ID() else None
-                    lista_args.append(CType.fromStr(tipo_param), nombre_param)
+                    lista_args.append((CType.fromStr(tipo_param), nombre_param))
         else: # Ej: f()
-            lista_args.append(CType.VOID, None) # Si no hay parámetros explícitos, se asume void
+            lista_args.append((CType.VOID, None)) # Si no hay parámetros explícitos, se asume void
         return lista_args
 
     # ###########################################################################
@@ -144,7 +144,7 @@ class Escucha(compiladorListener):
     def exitBloque(self, ctx: compiladorParser.BloqueContext): # Cuando se llega a un '}'
         self.ts.delContexto()
 
-        if ctx.getParent() is not None and isinstance(ctx.getParent(), compiladorParser.FuncionContext):
+        if ctx.parentCtx is not None and isinstance(ctx.parentCtx, compiladorParser.FuncionContext):
             # Si el bloque pertenece a una función, eliminamos el contexto extra
             self.ts.delContexto()
 
@@ -375,7 +375,7 @@ class Escucha(compiladorListener):
         
         lista_tipos_esperados = funcion.getListaArgs()
         
-        if len(lista_tipos_esperados) != (ctx.getChild(2).getchildCount() // 2 + 1):
+        if len(lista_tipos_esperados) != (ctx.getChild(2).getChildCount() // 2 + 1):
             self.registrarError(TipoError.SEMANTICO, f"La llamada a la función '{funcion.getNombre()}' tiene un error en la cantidad de parámetros. Se esperaban {len(lista_tipos_esperados)} parámetros, pero se recibieron {ctx.getChild(2).getchildCount()}.")
         else:
             for i, tipo_esperado in enumerate(lista_tipos_esperados):
@@ -386,7 +386,7 @@ class Escucha(compiladorListener):
     def exitIreturn(self, ctx: compiladorParser.IreturnContext):
         # funcion -> bloque -> instrucciones -> instruccion -> ireturn  
         
-        tatarabuelo = ctx.getParent().getParent().getParent().getParent() # Nodo función (?)
+        tatarabuelo = ctx.parentCtx.parentCtx.parentCtx.parentCtx # Nodo función (?)
 
         if tatarabuelo is None or not isinstance(tatarabuelo, compiladorParser.FuncionContext):
             self.registrarError(TipoError.SEMANTICO, "La instrucción 'return' debe estar dentro de una función.")

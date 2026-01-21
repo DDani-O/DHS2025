@@ -1,14 +1,11 @@
-int func(void);
+int suma(int a, int b);
 
-int func2(void){
-
+int main() {
+    int x;
+    x = suma(2, 3);
+    return 0;
 }
 
-int main(){
-
+int suma(int a, int b) {
+    return a + b;
 }
-
-int func(){
-    
-}
-

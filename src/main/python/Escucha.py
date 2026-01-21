@@ -22,6 +22,7 @@ class Escucha(compiladorListener):
         self.leyendoDeclaracion = False # Bandera para evitar reporte de "uso sin inicializar" en exitFactorCore durante la lectura de declaraciones
         self.stackFactores = [] # Pila para almacenar los factores encontrados durante el análisis de una declaración
         self.stackLlamadas = [] # Pila para almacenar las llamadas a funciones
+        self.stackReturns = [] # Pila para almacenar los returns a chequear al salir de la definición de una función
     
     def __str__(self):
         pass
@@ -71,22 +72,37 @@ class Escucha(compiladorListener):
         else:
             return tipo2
         
-    def obtenerTiposParams(self, ctx, nombre_funcion: str):
-        """Recibe el contexto (nodo) de una lista de parámetros y devuelve una lista con los tipos de datos de cada parámetro como CType. En caso de error, devuelve None."""
-        lista_tipos = []
+    def obtenerParams(self, ctx, nombre_funcion: str):
+        """Recibe el contexto (nodo) de una lista de parámetros y devuelve una lista con tuplas (tipo: CType, nombre: str). En caso de error, devuelve lista vacía."""
+        # lista_tipos = []
+        # if ctx.getChildCount() > 0: # Si la lista de parámetros NO deriva en vacío
+        #     if ctx.getText() == 'void': # Ej: f(void)
+        #         lista_tipos.append(CType.VOID)
+        #     elif 'void' in ctx.getText(): # Ej: f(int, void) o f(void, int)
+        #         self.registrarError(TipoError.SEMANTICO, f"La función '{nombre_funcion}' tiene una declaración de parámetros inválida con 'void'.")
+        #     else: # Ej: f(int, char, float)
+        #         for i in range(ctx.getChildCount() // 2 + 1):
+        #             tipo_param = ctx.getChild(2*i).tipo().getText() # Los tipos están en los hijos pares (0,2,4,...)
+        #             lista_tipos.append(CType.fromStr(tipo_param))
+        # else: # Ej: f()
+        #     lista_tipos.append(CType.VOID) # Si no hay parámetros explícitos, se asume void
+        # return lista_tipos  
+    
+        lista_args = []
         if ctx.getChildCount() > 0: # Si la lista de parámetros NO deriva en vacío
             if ctx.getText() == 'void': # Ej: f(void)
-                lista_tipos.append(CType.VOID)
+                lista_args.append(CType.VOID, None)
             elif 'void' in ctx.getText(): # Ej: f(int, void) o f(void, int)
                 self.registrarError(TipoError.SEMANTICO, f"La función '{nombre_funcion}' tiene una declaración de parámetros inválida con 'void'.")
-            else: # Ej: f(int, char, float)
+            else: # Ej: f(int, char, float) || f(int a, char, float b)
                 for i in range(ctx.getChildCount() // 2 + 1):
                     tipo_param = ctx.getChild(2*i).tipo().getText() # Los tipos están en los hijos pares (0,2,4,...)
-                    lista_tipos.append(CType.fromStr(tipo_param))
+                    nombre_param = ctx.getChild(2*i).ID().getText() if ctx.getChild(2*i).ID() else None
+                    lista_args.append(CType.fromStr(tipo_param), nombre_param)
         else: # Ej: f()
-            lista_tipos.append(CType.VOID) # Si no hay parámetros explícitos, se asume void
-        return lista_tipos
-    
+            lista_args.append(CType.VOID, None) # Si no hay parámetros explícitos, se asume void
+        return lista_args
+
     # ###########################################################################
     # Inicio
     # ###########################################################################
@@ -115,21 +131,25 @@ class Escucha(compiladorListener):
 
     # ------------ Creación de contextos ------------
     # Bloque estándar
-    def enterBloque(self, ctx): # Cuando se llega a un '{'
+    def enterBloque(self, ctx: compiladorParser.BloqueContext): # Cuando se llega a un '{'
         self.ts.addContexto()
     
     # Instrucciones de control
-    def enterIfor(self, ctx): # Cuando se entra en un 'for'
+    def enterIfor(self, ctx: compiladorParser.IforContext): # Cuando se entra en un 'for'
         self.ts.addContexto()
         # Esto genera la creación de 2 contextos anidados en for con llaves, pero no es bug: el contexto del for es necesario para variables declaradas en la inicialización y la implementación respeta el scope de las variables en C.
     
     # ------------ Eliminación de contextos ------------
     # Bloque estándar
-    def exitBloque(self, ctx): # Cuando se llega a un '}'
+    def exitBloque(self, ctx: compiladorParser.BloqueContext): # Cuando se llega a un '}'
         self.ts.delContexto()
 
+        if ctx.getParent() is not None and isinstance(ctx.getParent(), compiladorParser.FuncionContext):
+            # Si el bloque pertenece a una función, eliminamos el contexto extra
+            self.ts.delContexto()
+
     # Instrucciones de control
-    def exitIfor(self, ctx): # Cuando se sale de un 'for'
+    def exitIfor(self, ctx: compiladorParser.IforContext): # Cuando se sale de un 'for'
         self.ts.delContexto()
     
     # ------------ Agregado de símbolos tipo Variable ------------
@@ -210,15 +230,20 @@ class Escucha(compiladorListener):
             return # Salimos sin agregar nada a la TS
 
         tipo_retorno = CType.fromStr(ctx.tipo().getText())
-        lista_tipos = self.obtenerTiposParams(ctx.getChild(3), nombre_funcion) # El nodo de la lista es el hijo 3
-        if lista_tipos is None:
+        lista_argumentos = self.obtenerParams(ctx.getChild(3), nombre_funcion) # El nodo de la lista es el hijo 3
+        if not lista_argumentos:
             return # Hubo un error al procesar los parámetros, salimos sin agregar nada a la TS  
+        lista_tipos = [tipo for tipo, _ in lista_argumentos]
         nueva_funcion = Funcion(nombre_funcion, tipo_retorno, lista_tipos)
         self.ts.addSimbolo(nueva_funcion)
 
+    def enterFuncion(self, ctx: compiladorParser.FuncionContext):
+        # Al entrar en una funcion, limpiamos la pila de returns
+        self.stackReturns.clear()
+
     def exitFuncion(self, ctx: compiladorParser.FuncionContext):
         # funcion : tipo ID PA listParamsDef PC bloque ; 
-
+        
         if any(isinstance(hijo, ErrorNode) for hijo in ctx.getChildren()):
             # Si hay un error de sintaxis en la función, no tiene sentido seguir
             return
@@ -238,10 +263,13 @@ class Escucha(compiladorListener):
                 self.registrarError(TipoError.SEMANTICO, f"La función '{nombre_funcion}' ya fue definida.")
                 return
 
+        # Carga de la función en la TS
         tipo_retorno = CType.fromStr(ctx.tipo().getText())
-        lista_tipos = self.obtenerTiposParams(ctx.getChild(3), nombre_funcion)
-        if lista_tipos is None:
+        lista_argumentos = self.obtenerParams(ctx.getChild(3), nombre_funcion)
+        if not lista_argumentos:
             return
+        lista_tipos = [tipo for tipo, _ in lista_argumentos]
+
         if existente is not None: 
             if tipo_retorno != existente.getTipoDato() or lista_tipos != existente.getListaArgs():
                 self.registrarError(TipoError.SEMANTICO, f"La definición de la función '{nombre_funcion}' no coincide con su prototipo.")
@@ -252,9 +280,19 @@ class Escucha(compiladorListener):
         nueva_funcion.setInicializado()
         self.ts.addSimbolo(nueva_funcion)
 
-    def exitLlamadaFunc(self, ctx: compiladorParser.LlamadaFuncContext):
-        self.stackLlamadas.append(ctx) # Guardamos la llamada para procesarla al final
+        # Agregamos los parámetros como variables en el contexto de la función
+        self.ts.addContexto() # Contexto para los parámetros de la función
+        if not lista_argumentos == [(CType.VOID, None)]: # Caso especial: función sin parámetros
+            for tipo, nombre in lista_argumentos:
+                nueva_variable = Variable(nombre, tipo)
+                nueva_variable.setInicializado()
+                self.ts.addSimbolo(nueva_variable)
         
+        # Chequeo de los returns almacenados en la pila
+        for tipo_retorno_recibido in self.stackReturns:
+            if tipo_retorno != tipo_retorno_recibido:
+                self.registrarError(TipoError.SEMANTICO, f"La instrucción 'return' en la función '{nombre_funcion}' tiene un error de tipo. Se esperaba '{tipo_retorno.name}', pero se recibió '{tipo_retorno_recibido.name}'.")
+    
     # ###########################################################################
     # Otros chequeos de semántica
     # ###########################################################################
@@ -322,3 +360,48 @@ class Escucha(compiladorListener):
     def exitOpal(self, ctx: compiladorParser.OpalContext):
         # Propagación del tipo desde el hijo único al nodo de la operación
         ctx.tipo = ctx.getChild(0).tipo
+
+    # Control de tipos de datos compatibles
+    def exitLlamadaFunc(self, ctx: compiladorParser.LlamadaFuncContext):
+        
+        funcion = self.ts.buscarSimbolo(ctx.getChild(0).getText())
+
+        if funcion is None:
+            self.registrarError(TipoError.SEMANTICO, f"La función '{ctx.getChild(0).getText()}' no existe.")
+            return
+
+        if not funcion.getInicializado():
+            self.stackLlamadas.append(ctx) # Guardamos la llamada para procesar al final si se definió la función más tarde
+        
+        lista_tipos_esperados = funcion.getListaArgs()
+        
+        if len(lista_tipos_esperados) != (ctx.getChild(2).getchildCount() // 2 + 1):
+            self.registrarError(TipoError.SEMANTICO, f"La llamada a la función '{funcion.getNombre()}' tiene un error en la cantidad de parámetros. Se esperaban {len(lista_tipos_esperados)} parámetros, pero se recibieron {ctx.getChild(2).getchildCount()}.")
+        else:
+            for i, tipo_esperado in enumerate(lista_tipos_esperados):
+                tipo_recibido = ctx.getChild(2).getChild(2*i).tipo
+                if lista_tipos_esperados != ctx.getChild(2).getChild(2*i).tipo:
+                    self.registrarError(TipoError.SEMANTICO, f"La llamada a la función '{funcion.getNombre()}' tiene un error en el tipo del parámetro {i+1}. Se esperaba '{tipo_esperado.name}', pero se recibió '{tipo_recibido.name}'.")
+            
+    def exitIreturn(self, ctx: compiladorParser.IreturnContext):
+        # funcion -> bloque -> instrucciones -> instruccion -> ireturn  
+        
+        tatarabuelo = ctx.getParent().getParent().getParent().getParent() # Nodo función (?)
+
+        if tatarabuelo is None or not isinstance(tatarabuelo, compiladorParser.FuncionContext):
+            self.registrarError(TipoError.SEMANTICO, "La instrucción 'return' debe estar dentro de una función.")
+            return
+        
+        if isinstance(ctx.getChild(1), compiladorParser.OpalContext):
+            tipo_retorno = ctx.getChild(1).tipo
+        else:
+            tipo_retorno = CType.VOID
+
+        funcion_actual = self.ts.buscarSimbolo(tatarabuelo.ID().getText())
+        if funcion_actual is None: # La función no existe ==> Puede que estemos en una definicion sin prototipo
+            # Agregar a una pila para chequear el tipo cuando salimos de la definición
+            self.stackReturns.append(tipo_retorno)
+        else:
+            tipo_retorno_esperado = funcion_actual.getTipoDato()
+            if tipo_retorno_esperado != tipo_retorno:
+                self.registrarError(TipoError.SEMANTICO, f"La instrucción 'return' en la función '{funcion_actual.getNombre()}' tiene un error de tipo. Se esperaba '{tipo_retorno_esperado.name}', pero se recibió '{tipo_retorno.name}'.")

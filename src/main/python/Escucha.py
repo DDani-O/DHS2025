@@ -91,7 +91,7 @@ class Escucha(compiladorListener):
         lista_args = []
         if ctx.getChildCount() > 0: # Si la lista de parámetros NO deriva en vacío
             if ctx.getText() == 'void': # Ej: f(void)
-                lista_args.append(CType.VOID, None)
+                lista_args.append((CType.VOID, None))
             elif 'void' in ctx.getText(): # Ej: f(int, void) o f(void, int)
                 self.registrarError(TipoError.SEMANTICO, f"La función '{nombre_funcion}' tiene una declaración de parámetros inválida con 'void'.")
             else: # Ej: f(int, char, float) || f(int a, char, float b)
@@ -138,6 +138,11 @@ class Escucha(compiladorListener):
     def enterIfor(self, ctx: compiladorParser.IforContext): # Cuando se entra en un 'for'
         self.ts.addContexto()
         # Esto genera la creación de 2 contextos anidados en for con llaves, pero no es bug: el contexto del for es necesario para variables declaradas en la inicialización y la implementación respeta el scope de las variables en C.
+
+    # Funciones 
+    def enterListParamsDef(self, ctx: compiladorParser.ListParamsDefContext):
+        # Necesitamos agregar un contexto y cargar los parámetros ANTES de procesar el cuerpo. Esto nos permite validar el uso de los parámetros dentro del cuerpo de la función
+        self.ts.addContexto()
     
     # ------------ Eliminación de contextos ------------
     # Bloque estándar
@@ -204,6 +209,17 @@ class Escucha(compiladorListener):
             
         self.leyendoDeclaracion = False # Desactivamos la bandera luego de procesar toda la instrucción
 
+    def exitListParamsDef(self, ctx: compiladorParser.ListParamsDefContext):
+        lista_argumentos = self.obtenerParams(ctx, ctx.parentCtx.ID().getText())
+        if not lista_argumentos:
+            return 
+        # Agregamos los parámetros como variables en el contexto de la función
+        if not lista_argumentos == [(CType.VOID, None)]: # Caso especial: función sin parámetros
+            for tipo, nombre in lista_argumentos:
+                nueva_variable = Variable(nombre, tipo)
+                nueva_variable.setInicializado()
+                self.ts.addSimbolo(nueva_variable)
+
     # ------------ Agregado de símbolos tipo Funcion ------------
     # Funcion: (nombre, tipoDato, args: Optional, inicializado, usado)
     
@@ -258,7 +274,7 @@ class Escucha(compiladorListener):
             if not existente: # Y la función no existe ==> No fue prototipada ==> Error
                 self.registrarError(TipoError.SEMANTICO, f"La función '{nombre_funcion}' no fue prototipada.")
                 return
-        if existente is not None: # La función ya existe en la TS ==> Existe un prototipo || Ya fue definida
+        if existente is not None: # La función ya existe en la TS ==> Sólo existe un prototipo || Ya fue definida
             if existente.getInicializado(): # Inicializada == True ==> Ya fue definida (existe un cuerpo) ==> Error
                 self.registrarError(TipoError.SEMANTICO, f"La función '{nombre_funcion}' ya fue definida.")
                 return
@@ -270,23 +286,15 @@ class Escucha(compiladorListener):
             return
         lista_tipos = [tipo for tipo, _ in lista_argumentos]
 
-        if existente is not None: 
+        if existente is not None:
             if tipo_retorno != existente.getTipoDato() or lista_tipos != existente.getListaArgs():
                 self.registrarError(TipoError.SEMANTICO, f"La definición de la función '{nombre_funcion}' no coincide con su prototipo.")
                 return
             existente.setInicializado()
-            return
+            return # Con esto evitamos agregarla de nuevo si ya había un prototipo
         nueva_funcion = Funcion(nombre_funcion, tipo_retorno, lista_tipos)
         nueva_funcion.setInicializado()
         self.ts.addSimbolo(nueva_funcion)
-
-        # Agregamos los parámetros como variables en el contexto de la función
-        self.ts.addContexto() # Contexto para los parámetros de la función
-        if not lista_argumentos == [(CType.VOID, None)]: # Caso especial: función sin parámetros
-            for tipo, nombre in lista_argumentos:
-                nueva_variable = Variable(nombre, tipo)
-                nueva_variable.setInicializado()
-                self.ts.addSimbolo(nueva_variable)
         
         # Chequeo de los returns almacenados en la pila
         for tipo_retorno_recibido in self.stackReturns:
@@ -376,32 +384,35 @@ class Escucha(compiladorListener):
         lista_tipos_esperados = funcion.getListaArgs()
         
         if len(lista_tipos_esperados) != (ctx.getChild(2).getChildCount() // 2 + 1):
-            self.registrarError(TipoError.SEMANTICO, f"La llamada a la función '{funcion.getNombre()}' tiene un error en la cantidad de parámetros. Se esperaban {len(lista_tipos_esperados)} parámetros, pero se recibieron {ctx.getChild(2).getchildCount()}.")
-        else:
+            self.registrarError(TipoError.SEMANTICO, f"La llamada a la función '{funcion.getNombre()}' tiene un error en la cantidad de parámetros. Se esperaban {len(lista_tipos_esperados)} parámetros, pero se recibieron {ctx.getChild(2).getChildCount()}.")
+        else: # Chequeo de tipos de cada parámetro
             for i, tipo_esperado in enumerate(lista_tipos_esperados):
                 tipo_recibido = ctx.getChild(2).getChild(2*i).tipo
-                if lista_tipos_esperados != ctx.getChild(2).getChild(2*i).tipo:
+                if tipo_esperado != tipo_recibido:
                     self.registrarError(TipoError.SEMANTICO, f"La llamada a la función '{funcion.getNombre()}' tiene un error en el tipo del parámetro {i+1}. Se esperaba '{tipo_esperado.name}', pero se recibió '{tipo_recibido.name}'.")
             
     def exitIreturn(self, ctx: compiladorParser.IreturnContext):
-        # funcion -> bloque -> instrucciones -> instruccion -> ireturn  
-        
-        tatarabuelo = ctx.parentCtx.parentCtx.parentCtx.parentCtx # Nodo función (?)
-
-        if tatarabuelo is None or not isinstance(tatarabuelo, compiladorParser.FuncionContext):
+        # funcion -> bloque -> instrucciones -> (instrucciones)* -> instruccion -> ireturn  
+        # Revisamos si está dentro de una función
+        ancestro = ctx
+        while ancestro is not None and not isinstance(ancestro, compiladorParser.FuncionContext):
+            ancestro = ancestro.parentCtx
+        if ancestro is None:
             self.registrarError(TipoError.SEMANTICO, "La instrucción 'return' debe estar dentro de una función.")
             return
         
+        # Obtenemos el tipo de retorno de la instrucción
         if isinstance(ctx.getChild(1), compiladorParser.OpalContext):
             tipo_retorno = ctx.getChild(1).tipo
         else:
             tipo_retorno = CType.VOID
 
-        funcion_actual = self.ts.buscarSimbolo(tatarabuelo.ID().getText())
+        # Comparación con el tipo esperado
+        funcion_actual = self.ts.buscarSimbolo(ancestro.ID().getText())
         if funcion_actual is None: # La función no existe ==> Puede que estemos en una definicion sin prototipo
             # Agregar a una pila para chequear el tipo cuando salimos de la definición
             self.stackReturns.append(tipo_retorno)
         else:
             tipo_retorno_esperado = funcion_actual.getTipoDato()
-            if tipo_retorno_esperado != tipo_retorno:
+            if tipo_retorno != tipo_retorno_esperado:
                 self.registrarError(TipoError.SEMANTICO, f"La instrucción 'return' en la función '{funcion_actual.getNombre()}' tiene un error de tipo. Se esperaba '{tipo_retorno_esperado.name}', pero se recibió '{tipo_retorno.name}'.")

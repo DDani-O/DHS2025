@@ -73,21 +73,7 @@ class Escucha(compiladorListener):
             return tipo2
         
     def obtenerParams(self, ctx, nombre_funcion: str):
-        """Recibe el contexto (nodo) de una lista de parámetros y devuelve una lista con tuplas (tipo: CType, nombre: str). En caso de error, devuelve lista vacía."""
-        # lista_tipos = []
-        # if ctx.getChildCount() > 0: # Si la lista de parámetros NO deriva en vacío
-        #     if ctx.getText() == 'void': # Ej: f(void)
-        #         lista_tipos.append(CType.VOID)
-        #     elif 'void' in ctx.getText(): # Ej: f(int, void) o f(void, int)
-        #         self.registrarError(TipoError.SEMANTICO, f"La función '{nombre_funcion}' tiene una declaración de parámetros inválida con 'void'.")
-        #     else: # Ej: f(int, char, float)
-        #         for i in range(ctx.getChildCount() // 2 + 1):
-        #             tipo_param = ctx.getChild(2*i).tipo().getText() # Los tipos están en los hijos pares (0,2,4,...)
-        #             lista_tipos.append(CType.fromStr(tipo_param))
-        # else: # Ej: f()
-        #     lista_tipos.append(CType.VOID) # Si no hay parámetros explícitos, se asume void
-        # return lista_tipos  
-    
+        """Recibe el contexto (nodo) de una lista de parámetros y devuelve una lista con tuplas (tipo: CType, nombre: str). En caso de error, devuelve lista vacía."""    
         lista_args = []
         if ctx.getChildCount() > 0: # Si la lista de parámetros NO deriva en vacío
             if ctx.getText() == 'void': # Ej: f(void)

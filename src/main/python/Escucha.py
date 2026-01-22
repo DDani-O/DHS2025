@@ -102,6 +102,12 @@ class Escucha(compiladorListener):
 
     def exitPrograma(self, ctx:compiladorParser.ProgramaContext):
         # self.buscarVariablesNoUsadas()
+
+        # Chequeo de llamadas a funciones no definidas
+        for llamada in self.stackLlamadas:
+            funcion = self.ts.buscarSimbolo(llamada.getChild(0).getText())
+            if not funcion.getInicializado():
+                self.registrarError(TipoError.SEMANTICO, f"La función '{funcion.getNombre()}' no fue definida.")
     
         # Tenemos que imprimir la TS solo si no hubo errores sintácticos ni semánticos
         if self.huboErrores or self.escuchaErroresSintacticos.errores: # Lista NO vacía = True
@@ -183,7 +189,9 @@ class Escucha(compiladorListener):
             # 3ro) Controlamos el inicializador
             if(inicializada):
                 for factor in self.stackFactores:
-                    self.comprobarExistenciaSimbolo(factor)
+                    if self.comprobarExistenciaSimbolo(factor):
+                        if not self.ts.buscarSimbolo(factor).getInicializado():
+                            self.registrarError(TipoError.SEMANTICO, f"La variable '{factor}' está siendo usada sin inicializar en el inicializador de la variable '{nombre}'.")
             self.stackFactores.clear() # Limpiamos la pila de factores para la próxima declaración
             
             # 4to) Creamos el símbolo y lo integramos a la TS
@@ -203,7 +211,7 @@ class Escucha(compiladorListener):
         if not lista_argumentos == [(CType.VOID, None)]: # Caso especial: función sin parámetros
             for tipo, nombre in lista_argumentos:
                 nueva_variable = Variable(nombre, tipo)
-                nueva_variable.setInicializado()
+                nueva_variable.setInicializado() # Parámetros siempre inicializados
                 self.ts.addSimbolo(nueva_variable)
 
     # ------------ Agregado de símbolos tipo Funcion ------------
@@ -310,6 +318,8 @@ class Escucha(compiladorListener):
             if not self.leyendoDeclaracion:
                 if(self.comprobarExistenciaSimbolo(nombre_id)):
                     ctx.tipo = self.ts.buscarSimbolo(nombre_id).getTipoDato() # Asignamos el tipo del ID al contexto actual
+                    if not self.ts.buscarSimbolo(nombre_id).getInicializado():
+                        self.registrarError(TipoError.SEMANTICO, f"La variable '{nombre_id}' está siendo usada sin inicializar.")
                 else:
                     ctx.tipo = CType.UNDETERMINED # Tipo indeterminado si no existe el símbolo
             else:
@@ -376,9 +386,11 @@ class Escucha(compiladorListener):
         
         if len(lista_tipos_esperados) != (ctx.getChild(2).getChildCount() // 2 + 1):
             self.registrarError(TipoError.SEMANTICO, f"La llamada a la función '{funcion.getNombre()}' tiene un error en la cantidad de parámetros. Se esperaban {len(lista_tipos_esperados)} parámetros, pero se recibieron {ctx.getChild(2).getChildCount()}.")
-        else: # Chequeo de tipos de cada parámetro
+        else: 
             for i, tipo_esperado in enumerate(lista_tipos_esperados):
-                tipo_recibido = ctx.getChild(2).getChild(2*i).tipo
+                argumento = ctx.getChild(2).getChild(2*i)
+                # Chequeo de tipos de cada argumento
+                tipo_recibido = argumento.tipo
                 if tipo_esperado != tipo_recibido:
                     self.registrarError(TipoError.SEMANTICO, f"La llamada a la función '{funcion.getNombre()}' tiene un error en el tipo del parámetro {i+1}. Se esperaba '{tipo_esperado.name}', pero se recibió '{tipo_recibido.name}'.")
             

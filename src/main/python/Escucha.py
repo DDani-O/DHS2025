@@ -101,13 +101,17 @@ class Escucha(compiladorListener):
         print(" ------ Comienza el parsing ------ ")
 
     def exitPrograma(self, ctx:compiladorParser.ProgramaContext):
-        # self.buscarVariablesNoUsadas()
-
         # Chequeo de llamadas a funciones no definidas
         for llamada in self.stackLlamadas:
             funcion = self.ts.buscarSimbolo(llamada.getChild(0).getText())
             if not funcion.getInicializado():
                 self.registrarError(TipoError.SEMANTICO, f"La función '{funcion.getNombre()}' no fue definida.")
+        
+        # Chequeo de símbolos (de todo tipo) declarados pero no usados
+        for contexto in self.ts.historialCTX:
+            for nombre, simbolo in contexto.simbolos.items():
+                if not simbolo.getUsado():
+                    self.registrarError(TipoError.SEMANTICO, f"El símbolo ({"variable" if isinstance(simbolo, Variable) else "función"}) '{nombre}' fue declarado pero no fue usado.")
     
         # Tenemos que imprimir la TS solo si no hubo errores sintácticos ni semánticos
         if self.huboErrores or self.escuchaErroresSintacticos.errores: # Lista NO vacía = True
@@ -190,8 +194,11 @@ class Escucha(compiladorListener):
             if(inicializada):
                 for factor in self.stackFactores:
                     if self.comprobarExistenciaSimbolo(factor):
-                        if not self.ts.buscarSimbolo(factor).getInicializado():
+                        simbolo = self.ts.buscarSimbolo(factor)
+                        if not simbolo.getInicializado():
                             self.registrarError(TipoError.SEMANTICO, f"La variable '{factor}' está siendo usada sin inicializar en el inicializador de la variable '{nombre}'.")
+                        simbolo.setUsado()
+                        
             self.stackFactores.clear() # Limpiamos la pila de factores para la próxima declaración
             
             # 4to) Creamos el símbolo y lo integramos a la TS
@@ -289,7 +296,7 @@ class Escucha(compiladorListener):
         nueva_funcion = Funcion(nombre_funcion, tipo_retorno, lista_tipos)
         nueva_funcion.setInicializado()
         if nombre_funcion == "main":
-            nueva_funcion.setUsado() # Main siempre se considera usado
+            nueva_funcion.setUsado() # Main siempre se considera usada
         self.ts.addSimbolo(nueva_funcion)
         
         # Chequeo de los returns almacenados en la pila
@@ -305,7 +312,8 @@ class Escucha(compiladorListener):
         
         # Chequeo de uso de variables (IDs) en el término de la IZQUIERDA
         nombre_id = ctx.ID().getText()
-        self.comprobarExistenciaSimbolo(nombre_id)
+        if self.comprobarExistenciaSimbolo(nombre_id):
+            self.ts.buscarSimbolo(nombre_id).setInicializado() # Marcamos la variable como inicializada tras una asignación
 
     def exitFactorCore(self, ctx: compiladorParser.FactorCoreContext):
 
@@ -317,9 +325,11 @@ class Escucha(compiladorListener):
             nombre_id = ctx.ID().getText()
             if not self.leyendoDeclaracion:
                 if(self.comprobarExistenciaSimbolo(nombre_id)):
-                    ctx.tipo = self.ts.buscarSimbolo(nombre_id).getTipoDato() # Asignamos el tipo del ID al contexto actual
-                    if not self.ts.buscarSimbolo(nombre_id).getInicializado():
+                    simbolo = self.ts.buscarSimbolo(nombre_id)
+                    ctx.tipo = simbolo.getTipoDato() # Asignamos el tipo del ID al contexto actual
+                    if not simbolo.getInicializado():
                         self.registrarError(TipoError.SEMANTICO, f"La variable '{nombre_id}' está siendo usada sin inicializar.")
+                    simbolo.setUsado()
                 else:
                     ctx.tipo = CType.UNDETERMINED # Tipo indeterminado si no existe el símbolo
             else:
@@ -393,6 +403,8 @@ class Escucha(compiladorListener):
                 tipo_recibido = argumento.tipo
                 if tipo_esperado != tipo_recibido:
                     self.registrarError(TipoError.SEMANTICO, f"La llamada a la función '{funcion.getNombre()}' tiene un error en el tipo del parámetro {i+1}. Se esperaba '{tipo_esperado.name}', pero se recibió '{tipo_recibido.name}'.")
+
+        funcion.setUsado()
             
     def exitIreturn(self, ctx: compiladorParser.IreturnContext):
         # funcion -> bloque -> instrucciones -> (instrucciones)* -> instruccion -> ireturn  

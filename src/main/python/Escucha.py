@@ -37,10 +37,10 @@ class Escucha(compiladorListener):
         print(f"ERROR {tipo}: {msj}")
 
     def comprobarExistenciaSimbolo(self, nombre: str) -> bool:
-        """Recibe el nombre de un símbolo y verifica si existe en la TS. Si no existe, registra un error semántico. Devuelve True si existe, False en caso contrario."""
+        """Recibe el nombre de un símbolo, verifica si existe en la TS y, si no existe, registra un error semántico. Devuelve True si existe, False en caso contrario."""
         simbolo = self.ts.buscarSimbolo(nombre)
         if(simbolo is None):
-            self.registrarError(TipoError.SEMANTICO, f"La variable '{nombre}' no existe.")
+            self.registrarError(TipoError.SEMANTICO, f"El identificador '{nombre}' no existe.")
             return False
         else:
             simbolo.setUsado()
@@ -280,6 +280,8 @@ class Escucha(compiladorListener):
             return # Con esto evitamos agregarla de nuevo si ya había un prototipo
         nueva_funcion = Funcion(nombre_funcion, tipo_retorno, lista_tipos)
         nueva_funcion.setInicializado()
+        if nombre_funcion == "main":
+            nueva_funcion.setUsado() # Main siempre se considera usado
         self.ts.addSimbolo(nueva_funcion)
         
         # Chequeo de los returns almacenados en la pila
@@ -303,7 +305,7 @@ class Escucha(compiladorListener):
         ctx.tipo = CType.UNDETERMINED
         
         # Chequeo de uso de variables (IDs) en el término de la DERECHA
-        if ctx.ID(): # Si el factor es un ID
+        if ctx.ID(): # Si el factor es un ID (una variable)
             nombre_id = ctx.ID().getText()
             if not self.leyendoDeclaracion:
                 if(self.comprobarExistenciaSimbolo(nombre_id)):
@@ -321,7 +323,7 @@ class Escucha(compiladorListener):
         if ctx.PA():
             ctx.tipo = ctx.exp().tipo # El tipo de dato de una expresión entre paréntesis es el tipo de dato de la expresión misma
         if ctx.llamadaFunc():
-            pass
+            ctx.tipo = ctx.llamadaFunc().tipo # El tipo de dato de una llamada a función es el tipo de dato retornado por la función
         
     def exitFactor(self, ctx: compiladorParser.FactorContext):
         # Propagación del tipo desde el FactorCore al Factor
@@ -355,18 +357,21 @@ class Escucha(compiladorListener):
         # Propagación del tipo desde el hijo único al nodo de la operación
         ctx.tipo = ctx.getChild(0).tipo
 
-    # Control de tipos de datos compatibles
     def exitLlamadaFunc(self, ctx: compiladorParser.LlamadaFuncContext):
         
         funcion = self.ts.buscarSimbolo(ctx.getChild(0).getText())
 
         if funcion is None:
             self.registrarError(TipoError.SEMANTICO, f"La función '{ctx.getChild(0).getText()}' no existe.")
+            ctx.tipo = CType.UNDETERMINED
             return
+        else:
+            ctx.tipo = funcion.getTipoDato() # Asignamos el tipo de dato de la función al nodo
 
         if not funcion.getInicializado():
             self.stackLlamadas.append(ctx) # Guardamos la llamada para procesar al final si se definió la función más tarde
         
+        # Control de tipos de datos compatibles
         lista_tipos_esperados = funcion.getListaArgs()
         
         if len(lista_tipos_esperados) != (ctx.getChild(2).getChildCount() // 2 + 1):
@@ -386,7 +391,7 @@ class Escucha(compiladorListener):
         if ancestro is None:
             self.registrarError(TipoError.SEMANTICO, "La instrucción 'return' debe estar dentro de una función.")
             return
-        
+        # Control de tipos de datos compatibles
         # Obtenemos el tipo de retorno de la instrucción
         if isinstance(ctx.getChild(1), compiladorParser.OpalContext):
             tipo_retorno = ctx.getChild(1).tipo

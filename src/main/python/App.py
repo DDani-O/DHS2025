@@ -17,7 +17,8 @@ def main(argv):
     # Entradas de testing
     # archivo = "input/testerErroresSintacticos.txt"
     # archivo = "input/testerContextosYVar.txt"
-    archivo = "input/entradaSimple.txt"
+    # archivo = "input/entradaSimple.txt"
+    archivo = "input/testerFunciones.txt"
 
     if len(argv) > 1 :
         archivo = argv[1]

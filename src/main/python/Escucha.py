@@ -31,16 +31,20 @@ class Escucha(compiladorListener):
     # Utilidades
     # ###########################################################################
 
-    def registrarError(self, tipo : TipoError, msj : str):
-        """Recibe un mensaje de error y lo imprime por consola. Además, marca que hubo errores en la compilación."""
+    def registrarError(self, tipo : TipoError, msj : str, ctx = None):
+        """Recibe un mensaje de error y lo imprime por consola. Si se le pasa un contexto, también imprime la línea en que ocurrió el error. Luego marca que hubo errores en la compilación."""
         self.huboErrores = True
-        print(f"ERROR {tipo}: {msj}")
+        if ctx is not None and hasattr(ctx, 'start'):
+            linea = ctx.start.line
+        else:
+            linea = '?'
+        print(f"ERROR {tipo} (ln {linea}): {msj}")
 
-    def comprobarExistenciaSimbolo(self, nombre: str) -> bool:
+    def comprobarExistenciaSimbolo(self, nombre: str, ctx = None) -> bool:
         """Recibe el nombre de un símbolo, verifica si existe en la TS y, si no existe, registra un error semántico. Devuelve True si existe, False en caso contrario."""
         simbolo = self.ts.buscarSimbolo(nombre)
         if(simbolo is None):
-            self.registrarError(TipoError.SEMANTICO, f"El identificador '{nombre}' no existe.")
+            self.registrarError(TipoError.SEMANTICO, f"El identificador '{nombre}' no existe.", ctx)
             return False
         else:
             simbolo.setUsado()
@@ -60,12 +64,12 @@ class Escucha(compiladorListener):
                 rama_derecha = rama_derecha.getChild(2) # Avanzamos al siguiente nodo derecho
             return tipoResultante
 
-    def combinarTipos(self, tipo1: CType, tipo2: CType) -> CType:
+    def combinarTipos(self, tipo1: CType, tipo2: CType, ctx = None) -> CType:
         """Recibe dos tipos de datos y devuelve el tipo resultante de su combinación, según las reglas definidas."""
         if tipo1 == CType.UNDETERMINED or tipo2 == CType.UNDETERMINED:
             return CType.UNDETERMINED
         if tipo1 == CType.VOID or tipo2 == CType.VOID:
-            self.registrarError(TipoError.SEMANTICO, "Operación inválida con tipo 'void'.")
+            self.registrarError(TipoError.SEMANTICO, "Operación inválida con tipo 'void'.", ctx)
             return CType.UNDETERMINED
         if tipo1.rank > tipo2.rank:
             return tipo1
@@ -79,7 +83,7 @@ class Escucha(compiladorListener):
             if ctx.getText() == 'void': # Ej: f(void)
                 lista_args.append((CType.VOID, None))
             elif 'void' in ctx.getText(): # Ej: f(int, void) o f(void, int)
-                self.registrarError(TipoError.SEMANTICO, f"La función '{nombre_funcion}' tiene una declaración de parámetros inválida con 'void'.")
+                self.registrarError(TipoError.SEMANTICO, f"La función '{nombre_funcion}' tiene una declaración de parámetros inválida con 'void'.", ctx)
             else: # Ej: f(int, char, float) || f(int a, char, float b)
                 for i in range(ctx.getChildCount() // 2 + 1):
                     tipo_param = ctx.getChild(2*i).tipo().getText() # Los tipos están en los hijos pares (0,2,4,...)
@@ -105,7 +109,7 @@ class Escucha(compiladorListener):
         for llamada in self.stackLlamadas:
             funcion = self.ts.buscarSimbolo(llamada.getChild(0).getText())
             if not funcion.getInicializado():
-                self.registrarError(TipoError.SEMANTICO, f"La función '{funcion.getNombre()}' no fue definida.")
+                self.registrarError(TipoError.SEMANTICO, f"La función '{funcion.getNombre()}' no fue definida.", llamada)
         
         # Chequeo de símbolos (de todo tipo) declarados pero no usados
         for contexto in self.ts.historialCTX:
@@ -187,16 +191,16 @@ class Escucha(compiladorListener):
             
             # 2do) Vemos si el símbolo ya existe en el contexto actual
             if(self.ts.buscarSimboloContexto(nombre)):
-                self.registrarError(TipoError.SEMANTICO, f"La variable '{nombre}' ya fue declarada en este contexto.")
+                self.registrarError(TipoError.SEMANTICO, f"La variable '{nombre}' ya fue declarada en este contexto.", ctx)
                 continue # Pasamos a la siguiente sin agregar nada a la TS
             
             # 3ro) Controlamos el inicializador
             if(inicializada):
-                for factor in self.stackFactores:
-                    if self.comprobarExistenciaSimbolo(factor):
+                for factor, ctx_factor in self.stackFactores:
+                    if self.comprobarExistenciaSimbolo(factor, ctx_factor):
                         simbolo = self.ts.buscarSimbolo(factor)
                         if not simbolo.getInicializado():
-                            self.registrarError(TipoError.SEMANTICO, f"La variable '{factor}' está siendo usada sin inicializar en el inicializador de la variable '{nombre}'.")
+                            self.registrarError(TipoError.SEMANTICO, f"La variable '{factor}' está siendo usada sin inicializar en el inicializador de la variable '{nombre}'.", ctx)
                         simbolo.setUsado()
                         
             self.stackFactores.clear() # Limpiamos la pila de factores para la próxima declaración
@@ -234,16 +238,16 @@ class Escucha(compiladorListener):
         nombre_funcion = ctx.ID().getText()
 
         if len(self.ts.contextos) != 1: # Vemos si estamos en el contexto global (único permitido para funciones)
-            self.registrarError(TipoError.SEMANTICO, f"La función '{nombre_funcion}' solo puede ser declarada en el contexto global.")
+            self.registrarError(TipoError.SEMANTICO, f"La función '{nombre_funcion}' solo puede ser declarada en el contexto global.", ctx)
             return  # Salimos sin agregar nada a la TS
         if self.ts.buscarSimbolo("main"): # Vemos si se está intentando prototipar después de main (inválido)
-            self.registrarError(TipoError.SEMANTICO, f"La función '{nombre_funcion}' no puede ser prototipada después de 'main'.")
+            self.registrarError(TipoError.SEMANTICO, f"La función '{nombre_funcion}' no puede ser prototipada después de 'main'.", ctx)
             return  # Salimos sin agregar nada a la TS
         if nombre_funcion == "main": # Vemos si se está intentando prototipar main (inválido)
-            self.registrarError(TipoError.SEMANTICO, "La función 'main' no puede ser prototipada.")
+            self.registrarError(TipoError.SEMANTICO, "La función 'main' no puede ser prototipada.", ctx)
             return  # Salimos sin agregar nada a la TS
         if(self.ts.buscarSimbolo(nombre_funcion)):
-            self.registrarError(TipoError.SEMANTICO, f"La función '{nombre_funcion}' ya fue declarada.")
+            self.registrarError(TipoError.SEMANTICO, f"La función '{nombre_funcion}' ya fue declarada.", ctx)
             return # Salimos sin agregar nada a la TS
 
         tipo_retorno = CType.fromStr(ctx.tipo().getText())
@@ -269,15 +273,15 @@ class Escucha(compiladorListener):
         existente = self.ts.buscarSimbolo(nombre_funcion)
 
         if len(self.ts.contextos) != 1: # Vemos si estamos en el contexto global (único permitido para funciones)
-            self.registrarError(TipoError.SEMANTICO, f"La función '{nombre_funcion}' solo puede ser declarada en el contexto global.")
+            self.registrarError(TipoError.SEMANTICO, f"La función '{nombre_funcion}' solo puede ser declarada en el contexto global.", ctx)
             return  # Salimos sin agregar nada a la TS
         if self.ts.buscarSimbolo("main"): # Estamos después de main
             if not existente: # Y la función no existe ==> No fue prototipada ==> Error
-                self.registrarError(TipoError.SEMANTICO, f"La función '{nombre_funcion}' no fue prototipada.")
+                self.registrarError(TipoError.SEMANTICO, f"La función '{nombre_funcion}' no fue prototipada.", ctx)
                 return
         if existente is not None: # La función ya existe en la TS ==> Sólo existe un prototipo || Ya fue definida
             if existente.getInicializado(): # Inicializada == True ==> Ya fue definida (existe un cuerpo) ==> Error
-                self.registrarError(TipoError.SEMANTICO, f"La función '{nombre_funcion}' ya fue definida.")
+                self.registrarError(TipoError.SEMANTICO, f"La función '{nombre_funcion}' ya fue definida.", ctx)
                 return
 
         # Carga de la función en la TS
@@ -289,7 +293,7 @@ class Escucha(compiladorListener):
 
         if existente is not None:
             if tipo_retorno != existente.getTipoDato() or lista_tipos != existente.getListaArgs():
-                self.registrarError(TipoError.SEMANTICO, f"La definición de la función '{nombre_funcion}' no coincide con su prototipo.")
+                self.registrarError(TipoError.SEMANTICO, f"La definición de la función '{nombre_funcion}' no coincide con su prototipo.", ctx)
                 return
             existente.setInicializado()
             return # Con esto evitamos agregarla de nuevo si ya había un prototipo
@@ -300,10 +304,10 @@ class Escucha(compiladorListener):
         self.ts.addSimbolo(nueva_funcion)
         
         # Chequeo de los returns almacenados en la pila
-        for tipo_retorno_recibido in self.stackReturns:
+        for tipo_retorno_recibido, ctx_return in self.stackReturns:
             if tipo_retorno != tipo_retorno_recibido:
-                self.registrarError(TipoError.SEMANTICO, f"La instrucción 'return' en la función '{nombre_funcion}' tiene un error de tipo. Se esperaba '{tipo_retorno.name}', pero se recibió '{tipo_retorno_recibido.name}'.")
-    
+                self.registrarError(TipoError.SEMANTICO, f"La instrucción 'return' en la función '{nombre_funcion}' tiene un error de tipo. Se esperaba '{tipo_retorno.name}', pero se recibió '{tipo_retorno_recibido.name}'.", ctx_return)
+
     # ###########################################################################
     # Otros chequeos de semántica
     # ###########################################################################
@@ -312,7 +316,7 @@ class Escucha(compiladorListener):
         
         # Chequeo de uso de variables (IDs) en el término de la IZQUIERDA
         nombre_id = ctx.ID().getText()
-        if self.comprobarExistenciaSimbolo(nombre_id):
+        if self.comprobarExistenciaSimbolo(nombre_id, ctx):
             self.ts.buscarSimbolo(nombre_id).setInicializado() # Marcamos la variable como inicializada tras una asignación
 
     def exitFactorCore(self, ctx: compiladorParser.FactorCoreContext):
@@ -324,16 +328,16 @@ class Escucha(compiladorListener):
         if ctx.ID(): # Si el factor es un ID (una variable)
             nombre_id = ctx.ID().getText()
             if not self.leyendoDeclaracion:
-                if(self.comprobarExistenciaSimbolo(nombre_id)):
+                if(self.comprobarExistenciaSimbolo(nombre_id, ctx)):
                     simbolo = self.ts.buscarSimbolo(nombre_id)
                     ctx.tipo = simbolo.getTipoDato() # Asignamos el tipo del ID al contexto actual
                     if not simbolo.getInicializado():
-                        self.registrarError(TipoError.SEMANTICO, f"La variable '{nombre_id}' está siendo usada sin inicializar.")
+                        self.registrarError(TipoError.SEMANTICO, f"La variable '{nombre_id}' está siendo usada sin inicializar.", ctx)
                     simbolo.setUsado()
                 else:
                     ctx.tipo = CType.UNDETERMINED # Tipo indeterminado si no existe el símbolo
             else:
-                self.stackFactores.append(nombre_id)
+                self.stackFactores.append((nombre_id, ctx))
         
         # Asignación de tipo a literales y expresiones
         if ctx.NUMERO():
@@ -382,7 +386,7 @@ class Escucha(compiladorListener):
         funcion = self.ts.buscarSimbolo(ctx.getChild(0).getText())
 
         if funcion is None:
-            self.registrarError(TipoError.SEMANTICO, f"La función '{ctx.getChild(0).getText()}' no existe.")
+            self.registrarError(TipoError.SEMANTICO, f"La función '{ctx.getChild(0).getText()}' no existe.", ctx)
             ctx.tipo = CType.UNDETERMINED
             return
         else:
@@ -395,14 +399,14 @@ class Escucha(compiladorListener):
         lista_tipos_esperados = funcion.getListaArgs()
         
         if len(lista_tipos_esperados) != (ctx.getChild(2).getChildCount() // 2 + 1):
-            self.registrarError(TipoError.SEMANTICO, f"La llamada a la función '{funcion.getNombre()}' tiene un error en la cantidad de parámetros. Se esperaban {len(lista_tipos_esperados)} parámetros, pero se recibieron {ctx.getChild(2).getChildCount()}.")
+            self.registrarError(TipoError.SEMANTICO, f"La llamada a la función '{funcion.getNombre()}' tiene un error en la cantidad de parámetros. Se esperaban {len(lista_tipos_esperados)} parámetros, pero se recibieron {ctx.getChild(2).getChildCount()}.", ctx)
         else: 
             for i, tipo_esperado in enumerate(lista_tipos_esperados):
                 argumento = ctx.getChild(2).getChild(2*i)
                 # Chequeo de tipos de cada argumento
                 tipo_recibido = argumento.tipo
                 if tipo_esperado != tipo_recibido:
-                    self.registrarError(TipoError.SEMANTICO, f"La llamada a la función '{funcion.getNombre()}' tiene un error en el tipo del parámetro {i+1}. Se esperaba '{tipo_esperado.name}', pero se recibió '{tipo_recibido.name}'.")
+                    self.registrarError(TipoError.SEMANTICO, f"La llamada a la función '{funcion.getNombre()}' tiene un error en el tipo del parámetro {i+1}. Se esperaba '{tipo_esperado.name}', pero se recibió '{tipo_recibido.name}'.", ctx)
 
         funcion.setUsado()
             
@@ -413,7 +417,7 @@ class Escucha(compiladorListener):
         while ancestro is not None and not isinstance(ancestro, compiladorParser.FuncionContext):
             ancestro = ancestro.parentCtx
         if ancestro is None:
-            self.registrarError(TipoError.SEMANTICO, "La instrucción 'return' debe estar dentro de una función.")
+            self.registrarError(TipoError.SEMANTICO, "La instrucción 'return' debe estar dentro de una función.", ctx)
             return
         # Control de tipos de datos compatibles
         # Obtenemos el tipo de retorno de la instrucción
@@ -426,8 +430,8 @@ class Escucha(compiladorListener):
         funcion_actual = self.ts.buscarSimbolo(ancestro.ID().getText())
         if funcion_actual is None: # La función no existe ==> Puede que estemos en una definicion sin prototipo
             # Agregar a una pila para chequear el tipo cuando salimos de la definición
-            self.stackReturns.append(tipo_retorno)
+            self.stackReturns.append((tipo_retorno, ctx))
         else:
             tipo_retorno_esperado = funcion_actual.getTipoDato()
             if tipo_retorno != tipo_retorno_esperado:
-                self.registrarError(TipoError.SEMANTICO, f"La instrucción 'return' en la función '{funcion_actual.getNombre()}' tiene un error de tipo. Se esperaba '{tipo_retorno_esperado.name}', pero se recibió '{tipo_retorno.name}'.")
+                self.registrarError(TipoError.SEMANTICO, f"La instrucción 'return' en la función '{funcion_actual.getNombre()}' tiene un error de tipo. Se esperaba '{tipo_retorno_esperado.name}', pero se recibió '{tipo_retorno.name}'.", ctx)

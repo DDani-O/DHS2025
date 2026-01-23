@@ -133,25 +133,19 @@ class Escucha(compiladorListener):
     # Bloque estándar
     def enterBloque(self, ctx: compiladorParser.BloqueContext): # Cuando se llega a un '{'
         self.ts.addContexto()
+        if ctx.parentCtx is not None and isinstance(ctx.parentCtx, compiladorParser.FuncionContext):
+            # Si el bloque pertenece a una función, cargamos sus parámetros
+            self.cargarParametrosFuncion(ctx.parentCtx)
     
     # Instrucciones de control
     def enterIfor(self, ctx: compiladorParser.IforContext): # Cuando se entra en un 'for'
         self.ts.addContexto()
         # Esto genera la creación de 2 contextos anidados en for con llaves, pero no es bug: el contexto del for es necesario para variables declaradas en la inicialización y la implementación respeta el scope de las variables en C.
-
-    # Funciones 
-    def enterListParamsDef(self, ctx: compiladorParser.ListParamsDefContext):
-        # Necesitamos agregar un contexto y cargar los parámetros ANTES de procesar el cuerpo. Esto nos permite validar el uso de los parámetros dentro del cuerpo de la función
-        self.ts.addContexto()
     
     # ------------ Eliminación de contextos ------------
     # Bloque estándar
     def exitBloque(self, ctx: compiladorParser.BloqueContext): # Cuando se llega a un '}'
         self.ts.delContexto()
-
-        if ctx.parentCtx is not None and isinstance(ctx.parentCtx, compiladorParser.FuncionContext):
-            # Si el bloque pertenece a una función, eliminamos el contexto extra
-            self.ts.delContexto()
 
     # Instrucciones de control
     def exitIfor(self, ctx: compiladorParser.IforContext): # Cuando se sale de un 'for'
@@ -214,8 +208,9 @@ class Escucha(compiladorListener):
             
         self.leyendoDeclaracion = False # Desactivamos la bandera luego de procesar toda la instrucción
 
-    def exitListParamsDef(self, ctx: compiladorParser.ListParamsDefContext):
-        lista_argumentos = self.obtenerParams(ctx, ctx.parentCtx.ID().getText())
+    def cargarParametrosFuncion(self, ctx: compiladorParser.FuncionContext):
+        """Recibe el contexto (nodo) de la funcion y carga sus parámetros como variables en el contexto de la función."""
+        lista_argumentos = self.obtenerParams(ctx.listParamsDef(), ctx.ID().getText())
         if not lista_argumentos:
             return 
         # Agregamos los parámetros como variables en el contexto de la función

@@ -1,7 +1,12 @@
-int x = 0, y = 0, z = 0;
+int suma(int a, int b);
 
-x = y + z;
+int suma(int a, int b) {
+    int c = a + b;
+    return c;
+}
 
-if(x < 10){
-    for(int i = 0)
+int main() {
+    int x = 10, y = x, z = 0;
+    z = suma(x, y);
+    return z;
 }

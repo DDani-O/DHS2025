@@ -151,19 +151,16 @@ listStep : COMA step
 // ======= Declaraciones y asignación de variables =======
 
 declaracion : expDEC PYC ;
-expDEC: tipo ID inic listavar ;
+expDEC : tipo listaDeclaradores ;
 tipo : INT
      | FLOAT
      | CHAR
      | BOOL
      | VOID
      ;
-
-listavar : COMA ID inic listavar 
-         |
-         ;
-
-inic : ASIG opal 
+listaDeclaradores : declarador (COMA declarador)* ;
+declarador : ID inic ;
+inic : ASIG opal
      |
      ;
 

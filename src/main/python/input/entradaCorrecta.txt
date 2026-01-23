@@ -1,4 +1,6 @@
-int suma(int a, int b);
+int suma(int a, int);
+
+float division(int, int);
 
 int suma(int a, int b) {
     int c = a + b;
@@ -6,7 +8,13 @@ int suma(int a, int b) {
 }
 
 int main() {
-    int x = 10, y = x, z = 0;
-    z = suma(x, y);
+    int x = 10, y = x, z = suma(x, y);
+    int w = 3;
+    z = division(w, x);
     return z;
+}
+
+float division(int a, int b){
+    float c = a / b;
+    return c;
 }

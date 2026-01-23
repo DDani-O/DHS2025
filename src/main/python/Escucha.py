@@ -19,10 +19,9 @@ class Escucha(compiladorListener):
         self.huboErrores = False  # Bandera para indicar si hubo errores semánticos
         self.escuchaErroresSintacticos = escuchaErroresSintacticos
         # Los errores sintácticos se manejan en EscuchaErroresSintacticos
-        self.leyendoDeclaracion = False # Bandera para evitar reporte de "uso sin inicializar" en exitFactorCore durante la lectura de declaraciones
-        self.stackFactores = [] # Pila para almacenar los factores encontrados durante el análisis de una declaración
         self.stackLlamadas = [] # Pila para almacenar las llamadas a funciones
         self.stackReturns = [] # Pila para almacenar los returns a chequear al salir de la definición de una función
+        self.tipoADeclarar = None # Tipo de dato que se está declarando (usado en declaraciones múltiples)
     
     def __str__(self):
         pass
@@ -153,60 +152,18 @@ class Escucha(compiladorListener):
     
     # ------------ Agregado de símbolos tipo Variable ------------
     # Variable: (nombre, tipoDato, inicializado, usado)
+    def enterListaDeclaradores(self, ctx: compiladorParser.ListaDeclaradoresContext):
+        self.tipoADeclarar = CType.fromStr(ctx.parentCtx.tipo().getText())
 
-    def enterExpDEC(self, ctx: compiladorParser.ExpDECContext):
-        # Activamos la bandera para no considerar como uso sin inicializar las referencias que formen parte de los inicializadores en la misma linea
-        self.leyendoDeclaracion = True
-        self.stackFactores.clear() # Limpiamos la pila de factores antes de empezar a leer la declaración
-        
-    def exitExpDEC(self, ctx: compiladorParser.ExpDECContext):
-        # expDEC: tipo ID inic listavar 
-
-        if any(isinstance(hijo, ErrorNode) for hijo in ctx.getChildren()):
-            # Si hay un error de sintaxis en la declaración, no tiene sentido seguir
+    def exitDeclarador(self, ctx: compiladorParser.DeclaradorContext):
+        nombre_variable = ctx.ID().getText()
+        if self.ts.buscarSimbolo(nombre_variable):
+            self.registrarError(TipoError.SEMANTICO, f"La variable '{nombre_variable}' ya fue declarada en este contexto.", ctx)
             return
-        
-        # ----------- Lectura de la instrucción -----------
-        # 1ro) Extraemos el tipo de dato, que es el mismo para todas las declaraciones en la instrucción
-        tipo_dato = ctx.tipo().getText() 
-        # 2do) Convertimos el texto plano de las declaraciones en una lista de declaraciones individuales (Ej: ["x=5", "y", "z=x+2"])
-        declaraciones = ctx.getText().replace(tipo_dato,'').replace(';','').strip()
-        declaraciones = [declaracion.strip() for declaracion in declaraciones.split(',')]
-
-        #  ----------- Procesamiento de las declaraciones y generación de símbolos -----------
-        for declaracion in declaraciones:
-            # 1ro) Extraemos los datos de la declaración
-            if '=' in declaracion: # Tipo 1: con inicialización
-                nombre, inicializador = [term.strip() for term in declaracion.split('=')]
-                inicializada = True
-            else: # Tipo 2: sin inicialización
-                nombre = declaracion
-                inicializada = False
-            
-            # 2do) Vemos si el símbolo ya existe en el contexto actual
-            if(self.ts.buscarSimboloContexto(nombre)):
-                self.registrarError(TipoError.SEMANTICO, f"La variable '{nombre}' ya fue declarada en este contexto.", ctx)
-                continue # Pasamos a la siguiente sin agregar nada a la TS
-            
-            # 3ro) Controlamos el inicializador
-            if(inicializada):
-                for factor, ctx_factor in self.stackFactores:
-                    if self.comprobarExistenciaSimbolo(factor, ctx_factor):
-                        simbolo = self.ts.buscarSimbolo(factor)
-                        if not simbolo.getInicializado():
-                            self.registrarError(TipoError.SEMANTICO, f"La variable '{factor}' está siendo usada sin inicializar en el inicializador de la variable '{nombre}'.", ctx)
-                        simbolo.setUsado()
-                        
-            self.stackFactores.clear() # Limpiamos la pila de factores para la próxima declaración
-            
-            # 4to) Creamos el símbolo y lo integramos a la TS
-            tipo_dato = CType.fromStr(ctx.tipo().getText())
-            nueva_variable = Variable(nombre, tipo_dato)
-            if(inicializada):
-                nueva_variable.setInicializado()
-            self.ts.addSimbolo(nueva_variable)
-            
-        self.leyendoDeclaracion = False # Desactivamos la bandera luego de procesar toda la instrucción
+        nueva_variable = Variable(nombre_variable, self.tipoADeclarar)
+        if ctx.inic(): 
+            nueva_variable.setInicializado()
+        self.ts.addSimbolo(nueva_variable)
 
     def cargarParametrosFuncion(self, ctx: compiladorParser.FuncionContext):
         """Recibe el contexto (nodo) de la funcion y carga sus parámetros como variables en el contexto de la función."""
@@ -319,20 +276,15 @@ class Escucha(compiladorListener):
         # Tipo por defecto (CLAVE)
         ctx.tipo = CType.UNDETERMINED
         
-        # Chequeo de uso de variables (IDs) en el término de la DERECHA
-        if ctx.ID(): # Si el factor es un ID (una variable)
+        # Chequeo de uso de variables en el término de la DERECHA y asignación de tipo
+        if ctx.ID():
             nombre_id = ctx.ID().getText()
-            if not self.leyendoDeclaracion:
-                if(self.comprobarExistenciaSimbolo(nombre_id, ctx)):
-                    simbolo = self.ts.buscarSimbolo(nombre_id)
-                    ctx.tipo = simbolo.getTipoDato() # Asignamos el tipo del ID al contexto actual
-                    if not simbolo.getInicializado():
-                        self.registrarError(TipoError.SEMANTICO, f"La variable '{nombre_id}' está siendo usada sin inicializar.", ctx)
-                    simbolo.setUsado()
-                else:
-                    ctx.tipo = CType.UNDETERMINED # Tipo indeterminado si no existe el símbolo
-            else:
-                self.stackFactores.append((nombre_id, ctx))
+            if self.comprobarExistenciaSimbolo(nombre_id, ctx):
+                variable = self.ts.buscarSimbolo(nombre_id)
+                ctx.tipo = variable.getTipoDato()
+                if not variable.getInicializado():
+                    self.registrarError(TipoError.SEMANTICO, f"La variable '{nombre_id}' fue usada sin ser inicializada.", ctx)
+                variable.setUsado()
         
         # Asignación de tipo a literales y expresiones
         if ctx.NUMERO():

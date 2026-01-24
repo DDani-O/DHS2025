@@ -52,16 +52,19 @@ class Escucha(compiladorListener):
     def obtenerTipoResultante(self, ctx: ParserRuleContext) -> CType:
         """Recibe una expresión en forma de contexto y devuelve el tipo de dato correspondiente como CType."""
         
-        rama_derecha = ctx.getChild(1) # Puede derivar en vacío
-        if rama_derecha.getChildCount() == 0 : # Si tiene un solo hijo no vacío, retorna su valor
-            return ctx.getChild(0).tipo
-        else: # Más de un hijo no vacío, tenemos que evaluar el tipo resultante
-            tipoResultante = ctx.getChild(0).tipo
-            while rama_derecha.getChildCount() > 0:
-                tipo_leido = rama_derecha.getChild(1).tipo
-                tipoResultante = self.combinarTipos(tipoResultante, tipo_leido)
-                rama_derecha = rama_derecha.getChild(2) # Avanzamos al siguiente nodo derecho
-            return tipoResultante
+        try:
+            rama_derecha = ctx.getChild(1) # Puede derivar en vacío
+            if rama_derecha.getChildCount() == 0 : # Si tiene un solo hijo no vacío, retorna su valor
+                return ctx.getChild(0).tipo
+            else: # Más de un hijo no vacío, tenemos que evaluar el tipo resultante
+                tipoResultante = ctx.getChild(0).tipo
+                while rama_derecha.getChildCount() > 0:
+                    tipo_leido = rama_derecha.getChild(1).tipo
+                    tipoResultante = self.combinarTipos(tipoResultante, tipo_leido)
+                    rama_derecha = rama_derecha.getChild(2) # Avanzamos al siguiente nodo derecho
+                return tipoResultante
+        except AttributeError: # Este error salta en ramas incompletas por errores sintácticos
+            return CType.UNDETERMINED
 
     def combinarTipos(self, tipo1: CType, tipo2: CType, ctx = None) -> CType:
         """Recibe dos tipos de datos y devuelve el tipo resultante de su combinación, según las reglas definidas."""
@@ -157,7 +160,7 @@ class Escucha(compiladorListener):
 
     def exitDeclarador(self, ctx: compiladorParser.DeclaradorContext):
         nombre_variable = ctx.ID().getText()
-        if self.ts.buscarSimbolo(nombre_variable):
+        if self.ts.buscarSimboloContexto(nombre_variable):
             self.registrarError(TipoError.SEMANTICO, f"La variable '{nombre_variable}' ya fue declarada en este contexto.", ctx)
             return
         nueva_variable = Variable(nombre_variable, self.tipoADeclarar)
@@ -298,7 +301,10 @@ class Escucha(compiladorListener):
         
     def exitFactor(self, ctx: compiladorParser.FactorContext):
         # Propagación del tipo desde el FactorCore al Factor
-        ctx.tipo = ctx.factorSufix().factorCore().tipo
+        if any(isinstance(hijo, ErrorNode) for hijo in ctx.getChildren()) or ctx.factorSufix() is None or ctx.factorSufix().factorCore() is None: # Para que no explote por E Sintácticos
+            ctx.tipo = CType.UNDETERMINED
+        else:
+            ctx.tipo = ctx.factorSufix().factorCore().tipo
         
     def exitTerm(self, ctx: compiladorParser.TermContext):
         # Propagación del tipo desde los factores al término

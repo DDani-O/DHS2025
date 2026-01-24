@@ -2,7 +2,9 @@ int a = 0, b = 0, c = 0
 int x = 0, y = 0, z = 0;
 int g, h i j;
 
-x = a + b;
+float = 0;
+
+x = a + ;
 
 y = c * z
 
@@ -13,7 +15,7 @@ if a){
     }
 }
 
-for(int i = 0, x = ; ; {
+for(int i = 0, x = ; ;  }
 
-}
+
 

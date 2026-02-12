@@ -17,8 +17,8 @@ def main(argv):
     # Entradas de testing
     # archivo = "input/testerFunciones.txt"
     # archivo = "input/testerErroresSintacticos.txt"
-    # archivo = "input/entradaSimple.txt"
-    archivo = "input/entradaCorrecta.txt"
+    archivo = "input/entradaSimple.txt"
+    # archivo = "input/entradaCorrecta.txt"
     # archivo = "input/entradaConErrores.txt"
 
     if len(argv) > 1 :
@@ -49,13 +49,13 @@ def main(argv):
             escucha.ts.imprimirTS(f)
 
         # Generación de código intermedio
-        # visitante = Caminante()
-        # visitante.visitPrograma(tree)
+        visitante = Caminante()
+        visitante.visitPrograma(tree)
 
         # Impresión del código intermedio
-        # with open("CodigoIntermedio.txt", "w") as f:
-        #     for linea in visitante.codigoIntermedio:
-        #         f.write(linea + "\n")
+        with open("CodigoIntermedio.txt", "w") as f:
+            for linea in visitante.codigoIntermedio:
+                f.write(linea + "\n")
 
         # Impresión de código optimizado
         # TODO: Implementar optimizaciones y generar un archivo de salida para el código optimizado

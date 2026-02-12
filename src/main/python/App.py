@@ -33,16 +33,40 @@ def main(argv):
     escuchaErroresSintacticos = EscuchaErroresSintacticos()
     parser.addErrorListener(escuchaErroresSintacticos)
 
-    escucha = Escucha(escuchaErroresSintacticos)
+    # Agregado del Listener personalizado para detectar errores semánticos
+    escucha = Escucha()
     parser.addParseListener(escucha)
 
+    # Inicio del parsing
     tree = parser.programa()
 
-    # visitante = Caminante()
-    # visitante.visitPrograma(tree)
-    
-    # print(escucha)
-    # print(tree.toStringTree(recog=parser))
+    if not escucha.huboErrores and not escuchaErroresSintacticos.errores:
+        # Compilación sin errores, imprimimos la TS y generamos el código intermedio
+        print("Entrada correcta. Generando archivos de salida...")
+
+        # Impresión de la TS
+        with open("ContenidoTS.txt", "w") as f:
+            escucha.ts.imprimirTS(f)
+
+        # Generación de código intermedio
+        # visitante = Caminante()
+        # visitante.visitPrograma(tree)
+
+        # Impresión del código intermedio
+        # with open("CodigoIntermedio.txt", "w") as f:
+        #     for linea in visitante.codigoIntermedio:
+        #         f.write(linea + "\n")
+
+        # Impresión de código optimizado
+        # TODO: Implementar optimizaciones y generar un archivo de salida para el código optimizado
+
+    else: # Si hubo errores, limpiamos los archivos de salida para evitar confusiones
+        print("Entrada incorrecta. Limpiando archivos de salida...")
+        with open("ContenidoTS.txt", "w") as f:
+            f.write("Imposible generar la TS: Se encontraron errores durante el parsing.\n")
+        with open("CodigoIntermedio.txt", "w") as f:
+            f.write("Imposible generar el código intermedio: Se encontraron errores durante el parsing.\n")
+        # TODO limpiar el archivo de código optimizado también, una vez que se implemente la generación de código optimizado
 
 if __name__ == '__main__':
     main(sys.argv)

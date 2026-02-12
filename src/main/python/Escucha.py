@@ -8,17 +8,14 @@ from tablaDeSimbolos.Variable import Variable
 
 from Enumeraciones import TipoError
 from Enumeraciones import CType
-from EscuchaErroresSintacticos import EscuchaErroresSintacticos # Nos hace falta saber si hubo errores sintácticos para no imprimir la TS cuando salimos del programa
 from antlr4 import ErrorNode, ParserRuleContext 
 
 class Escucha(compiladorListener):
 
-    def __init__(self, escuchaErroresSintacticos):
+    def __init__(self):
         super().__init__()
         self.ts = TS.getTS()  # Obtener la instancia de la tabla de símbolos
         self.huboErrores = False  # Bandera para indicar si hubo errores semánticos
-        self.escuchaErroresSintacticos = escuchaErroresSintacticos
-        # Los errores sintácticos se manejan en EscuchaErroresSintacticos
         self.stackLlamadas = [] # Pila para almacenar las llamadas a funciones
         self.stackReturns = [] # Pila para almacenar los returns a chequear al salir de la definición de una función
         self.tipoADeclarar = None # Tipo de dato que se está declarando (usado en declaraciones múltiples)
@@ -118,13 +115,7 @@ class Escucha(compiladorListener):
             for nombre, simbolo in contexto.simbolos.items():
                 if not simbolo.getUsado():
                     self.registrarError(TipoError.SEMANTICO, f"El símbolo ({"variable" if isinstance(simbolo, Variable) else "función"}) '{nombre}' fue declarado pero no fue usado.")
-    
-        # Tenemos que imprimir la TS solo si no hubo errores sintácticos ni semánticos
-        if self.huboErrores or self.escuchaErroresSintacticos.errores: # Lista NO vacía = True
-            with open("ContenidoTS.txt", "w") as f:
-                f.write("Imposible generar la TS: Se encontraron errores durante el parsing.\n")
-        else: # Si no hubieron errores, imprimimos la TS
-            self.ts.imprimirTS()
+                    
         print(" ------ Termina el parsing ------ ")
     
     # ###########################################################################

@@ -1,1 +1,0 @@
-Imposible generar el código intermedio: Se encontraron errores durante el parsing.

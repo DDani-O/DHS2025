@@ -45,7 +45,7 @@ def main(argv):
         print("Entrada correcta. Generando archivos de salida...")
 
         # Impresión de la TS
-        with open("ContenidoTS.txt", "w") as f:
+        with open("output/ContenidoTS.txt", "w") as f:
             escucha.ts.imprimirTS(f)
 
         # Generación de código intermedio
@@ -53,7 +53,7 @@ def main(argv):
         visitante.visitPrograma(tree)
 
         # Impresión del código intermedio
-        with open("CodigoIntermedio.txt", "w") as f:
+        with open("output/CodigoIntermedio.txt", "w") as f:
             for linea in visitante.codigoIntermedio:
                 f.write(linea + "\n")
 

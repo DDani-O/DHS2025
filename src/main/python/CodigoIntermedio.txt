@@ -1,14 +1,1 @@
-t1 = 3 * 4
-t2 = 2 + t1
-t3 = t2 - 5
-x = t3
-t4 = 2 + 3
-t5 = t4 * 4
-t6 = t5 - 5
-t7 = t6 > 6
-t8 = 7 != 8
-t9 = t7 && t8
-t10 = 10 + 1
-t11 = 9 < t10
-t12 = t9 || t11
-x = t12
+Imposible generar el código intermedio: Se encontraron errores durante el parsing.

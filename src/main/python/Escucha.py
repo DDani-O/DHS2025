@@ -155,7 +155,7 @@ class Escucha(compiladorListener):
             self.registrarError(TipoError.SEMANTICO, f"La variable '{nombre_variable}' ya fue declarada en este contexto.", ctx)
             return
         nueva_variable = Variable(nombre_variable, self.tipoADeclarar)
-        if ctx.inic(): 
+        if ctx.inic().getChildCount() > 0:
             nueva_variable.setInicializado()
         self.ts.addSimbolo(nueva_variable)
 

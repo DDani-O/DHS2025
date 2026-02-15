@@ -221,7 +221,7 @@ class Caminante (compiladorVisitor) :
         self.visit(ctx.listaDeclaradores())
 
     def visitListaDeclaradores(self, ctx):
-        for decl in ctx.declarador():
+        for decl in ctx.declarador(): # Como puede haber múltiples ocurrencias devuelve una lista de nodos
             self.visit(decl)
 
     def visitDeclarador(self, ctx):

@@ -210,8 +210,8 @@ class Caminante (compiladorVisitor) :
             return ctx.ID().getText()
         if ctx.exp():
             return self.visit(ctx.exp())
-        # if ctx.llamadaFuncion():
-        #     return self.visit(ctx.llamadaFuncion())
+        if ctx.llamadaFunc():
+            return self.visit(ctx.llamadaFunc())
 
     # ------------------ Traducción de declaraciones ------------------
     def visitDeclaracion(self, ctx):
@@ -310,11 +310,66 @@ class Caminante (compiladorVisitor) :
 
     # ------------------ Traducción de funciones ------------------
 
-    def visitLlamadaFuncion(self, ctx):
-        return super().visitLlamadaFuncion(ctx)
+    def visitLlamadaFunc(self, ctx):
+        # llamadaFunc : ID PA listArgs PC ;
+        # listArgs : opal (COMA opal)*
+        #          |
+        #          ;
+        nombreFuncion = ctx.ID().getText()
+        listaArgs = ctx.listArgs().opal() # Como puede haber múltiples ocurrencias devuelve una lista de nodos que puede estar vacía si no hay argumentos
+
+        # 1: Evaluar y pushear argumentos (en orden)
+        if listaArgs: # [] != None, pero [] es Falsy
+            for arg in listaArgs:
+                valorArg = self.visit(arg) # Generamos el código para evaluar el argumento, cuyo resultado queda guardado en una temporal devuelta por el visit de opal
+                self.codigoIntermedio.append(f"push {valorArg}")
+        # 2: Pushear label de retorno
+        retorno = self.generarEtiqueta()
+        self.codigoIntermedio.append(f"push {retorno}")
+        # 3: Saltar a la función
+        self.codigoIntermedio.append(f"jmp {nombreFuncion}")
+        # 4: Etiquetar el retorno
+        self.codigoIntermedio.append(f"label {retorno}:")
+        # 5: Pop del retorno y devolverlo
+        tempRetorno = self.generarTemporal()
+        self.codigoIntermedio.append(f"pop {tempRetorno}")
+        return tempRetorno
 
     def visitFuncion(self, ctx):
-        return super().visitFuncion(ctx)
-    
-    def visitReturn(self, ctx):
-        return super().visitReturn(ctx)
+        # funcion : tipo ID PA listParamsDef PC bloque ; 
+        # listParamsDef : parametroDef (COMA parametroDef)*
+        #               | VOID
+        #               |
+        #               ;
+        # parametroDef : tipo ID;
+
+        # 1: Etiquetamos el inicio de la función con su nombre para poder saltar a ella desde las llamadas
+        nombreFuncion = ctx.ID().getText()
+        self.codigoIntermedio.append(f"label {nombreFuncion}:")
+        # 2: Pop de la dirección de retorno (que se pusheó al llamar a la función) para poder saltar a ella al finalizar la función
+        if not nombreFuncion == "main": # La función main no tiene dirección de retorno, ya que es el punto de entrada del programa, por lo que no necesitamos hacer un pop para esta función
+            tempRetorno = self.generarTemporal()
+            self.codigoIntermedio.append(f"pop {tempRetorno}")
+        # 3: Pop de los argumentos
+        params = ctx.listParamsDef().parametroDef()
+        if params: # [] != None, pero [] es Falsy
+            for param in reversed(params): # Reversed porque hay que hacerlo en orden "de pila" (el último argumento definido es el que queda más arriba en la pila, por lo que es el primero que hay que poppear)
+                nombreParam = param.ID().getText()
+                self.codigoIntermedio.append(f"pop {nombreParam}") # Pop del argumento
+        # 4: Generamos el código para el cuerpo de la función
+        self.visit(ctx.bloque())
+        # 5: Pusheamos el valor de retorno
+            # De esto se encarga el visit del return, que se activa cuando visitamos el bloque de la función.
+        # 6: Volvemos a la dirección de retorno
+        if not nombreFuncion == "main":
+            self.codigoIntermedio.append(f"jmp {tempRetorno}")
+
+    def visitIreturn(self, ctx):
+        # ireturn : RETURN opal PYC 
+        #         | RETURN PYC
+        #         ;
+        if ctx.opal() is not None:
+            valorRetorno = self.visit(ctx.opal()) # Generamos el código para evaluar el valor de retorno, cuyo resultado queda guardado en una temporal devuelta por el visit de opal
+            self.codigoIntermedio.append(f"push {valorRetorno}") # Pusheamos el valor de retorno para que pueda ser poppeado por la llamada de la función al finalizar
+        else:
+            self.codigoIntermedio.append(f"push None")

@@ -62,9 +62,9 @@ def main(argv):
 
     else: # Si hubo errores, limpiamos los archivos de salida para evitar confusiones
         print("Entrada incorrecta. Limpiando archivos de salida...")
-        with open("ContenidoTS.txt", "w") as f:
+        with open("output/ContenidoTS.txt", "w") as f:
             f.write("Imposible generar la TS: Se encontraron errores durante el parsing.\n")
-        with open("CodigoIntermedio.txt", "w") as f:
+        with open("output/CodigoIntermedio.txt", "w") as f:
             f.write("Imposible generar el código intermedio: Se encontraron errores durante el parsing.\n")
         # TODO limpiar el archivo de código optimizado también, una vez que se implemente la generación de código optimizado
 

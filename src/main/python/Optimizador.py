@@ -105,12 +105,20 @@ class Optimizador:
                         resultado = val1 * val2
                     elif operador == '/':
                         if val2 != 0:
-                            resultado = val1 / val2
+                            # Diferenciamos entre división entera y decimal según el formato de los operandos
+                            if op1.isdigit() and op2.isdigit(): # Si ambos operandos son enteros, hacemos división entera
+                                resultado = val1 // val2
+                            else: # Si alguno de los operandos es decimal, hacemos división normal
+                                resultado = val1 / val2
                         else:
                             raise ZeroDivisionError("División por cero")
                     elif operador == '%':
                         if val2 != 0:
-                            resultado = val1 % val2
+                            # El operador módulo sólo tiene sentido para enteros, así que verificamos que ambos operandos sean enteros antes de aplicarlo
+                            if op1.isdigit() and op2.isdigit():
+                                resultado = val1 % val2
+                            else:
+                                raise ValueError("Operador módulo solo válido para enteros")
                         else:
                             raise ZeroDivisionError("Módulo por cero")
                     elif operador == '||':
@@ -129,19 +137,21 @@ class Optimizador:
                         resultado = 1 if val1 < val2 else 0
                     elif operador == '<=':
                         resultado = 1 if val1 <= val2 else 0
-                    else:
+                    else: # Operador no contemplado: no plegamos esta línea
                         nuevo_codigo.append(linea)
                         continue
                     
-                    if resultado.is_integer():
+                    if isinstance(resultado, float) and resultado.is_integer(): # is_integer() sólo funciona para floats, por eso chequeamos el tipo antes
                         resultado = int(resultado) # Para evitar resultados como 5.0
                     
                     nueva_linea = f"{destino} = {resultado}"
+                    if nueva_linea != linea:
+                        print(f"Plegado de constantes: '{linea}' -> '{nueva_linea}'")
+                        hubo_cambios = True
                     nuevo_codigo.append(nueva_linea)
-                    hubo_cambios = True
                     continue
         
-                except Exception as e: 
+                except (ZeroDivisionError, ValueError) as e: # Especifico estos tipos de excepciones por las moscas, así evitamos que se cuelen otros errores no contemplados
                     nuevo_codigo.append(linea) # Si hay algún error (ej: división por cero), no optimizamos esta línea
                     continue 
 
@@ -153,8 +163,10 @@ class Optimizador:
 
                 resultado = 0 if val != 0 else 1
                 nueva_linea = f"{destino} = {resultado}"
+                if nueva_linea != linea:
+                    print(f"Plegado de constantes: '{linea}' -> '{nueva_linea}'")
+                    hubo_cambios = True
                 nuevo_codigo.append(nueva_linea)
-                hubo_cambios = True
                 continue
 
             # --- No hubo match de ningún tipo de plegado ---

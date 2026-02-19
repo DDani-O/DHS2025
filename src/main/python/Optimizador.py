@@ -1,5 +1,27 @@
 import re
 
+# ###########################################################################
+# Reglas léxicas para reconocer patrones de código intermedio
+# ###########################################################################
+
+ID = r'[a-zA-Z_][a-zA-Z0-9_]*' # Identificadores (variables, temporales, etiquetas)
+NUM = r'-?\d+(?:\.\d+)?' # Números enteros o decimales, con opcional signo negativo
+OP_BIN = r'==|!=|>=|<=|&&|\|\||[+\-*/%<>]' # Operadores binarios (comparación, lógica, aritmética)
+OP_UNARIO = r'!' # Operadores unarios (negación lógica)
+
+# t0 = 5 + 3 -> Plegado de constantes
+REGEX_BINARIA_CONSTANTE = re.compile(fr'^({ID})\s*=\s*({NUM})\s*({OP_BIN})\s*({NUM})$')
+# t0 = !5 -> Plegado de constantes unarias
+REGEX_UNARIA_CONSTANTE = re.compile(fr'^({ID})\s*=\s*({OP_UNARIO})\s*({NUM})$')
+# t0 = 5 -> Propagación de constante
+REGEX_ASIGNACION_CONSTANTE = re.compile(fr'^({ID})\s*=\s*({NUM})$')
+# x = t0 -> Propagación de copia
+REGEX_ASIGNACION_SIMPLE = re.compile(fr'^({ID})\s*=\s*({ID})$')
+
+# ###########################################################################
+# Optimizador de código intermedio
+# ###########################################################################
+
 class Optimizador:
     def __init__(self):
         self.codigo = []

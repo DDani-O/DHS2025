@@ -49,11 +49,11 @@ class Optimizador:
         iteracion = 1
         while True:
             print(f"Iteración {iteracion}")
-            resultado1 = self.plegado_constantes()
-            resultado2 = self.propagacion_copia()
-            resultado3 = self.eliminacion_codigo_muerto()
+            hubo_plegado = self.plegado_constantes()
+            hubo_propagacion = self.propagacion_copia()
+            hubo_eliminacion = self.eliminacion_codigo_muerto()
 
-            if not (resultado1 or resultado2 or resultado3): # Si no se hicieron cambios, terminamos
+            if not (hubo_plegado or hubo_propagacion or hubo_eliminacion): # Si no se hicieron cambios, terminamos
                 print("No se realizaron más cambios. Terminando optimización...")
                 break
             iteracion += 1

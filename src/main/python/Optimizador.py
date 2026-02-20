@@ -10,6 +10,16 @@ OP_BIN = r'==|!=|>=|<=|&&|\|\||[+\-*/%<>]' # Operadores binarios (comparación, 
 OP_UNARIO = r'!' # Operadores unarios
 # NOTA: Sólo tenemos en cuenta la negación porque es el único operador unario implementado. Si agregamos más, habría que considerarlos acá.
 
+# Instrucciones con efecto
+REGEX_EFECTO = re.compile(r'\b(ifnot|if|push|pop|jmp|label)\b')
+# \b es un caracter especial de "límite de palabra": el lugar donde una palabra comienza o termina
+
+# x = x + 1   o  x = x - 1  (considera 1 ó 1.0) -> Detecta incrementos/decrementos en forma normalizada
+REGEX_INCREMENTO = re.compile(fr'^({ID})\s*=\s*\\1\s*([+\-])\s*(?:1(?:\.0)?)\s*$')
+# Grupos: (destino, operador)
+# (?:...) indica un "grupo de no captura" (sirve para tratar todo lo que está dentro como una unidad, pero sin extraerla y guardarla en memoria).
+# \1 es una "retroreferencia", quiere decir "lo mismo que en el grupo 1" (en este caso: {ID}). La segunda barra (\\1) es para que el motor de re reciba correctamente el caracter.
+
 # t0 = 5 + 3 -> Plegado de constantes en operaciones binarias
 REGEX_BINARIA_CONSTANTE = re.compile(fr'^({ID})\s*=\s*({NUM})\s*({OP_BIN})\s*({NUM})$')
 # Grupos = (destino, op1, operador, op2)
@@ -25,10 +35,15 @@ REGEX_ASIGNACION_CONSTANTE = re.compile(fr'^({ID})\s*=\s*({NUM})$')
 # Grupos = (destino, constante)
 # Grupos = ({ID}, {NUM}), lo demás se descarta
 
-# x = t0 -> Propagación de copia
+# x = t0 o x = y -> Propagación de copia
 REGEX_ASIGNACION_SIMPLE = re.compile(fr'^({ID})\s*=\s*({ID})$')
 # Grupos = (destino, origen)
 # Grupos = ({ID}, {ID}), lo demás se descarta
+
+# t2 = t1 * c   o   x = a + b -> Propagación en asignaciones binarias que pueden contener IDs o NUM
+REGEX_ASIGNACION_BINARIA = re.compile(fr'^({ID})\s*=\s*({ID}|{NUM})\s*({OP_BIN})\s*({ID}|{NUM})$')
+# Grupos = (destino, op1, operador, op2)
+# Grupos = ({ID} , {ID}|{NUM} , {OP_BIN} , {ID}|{NUM})
 
 # ###########################################################################
 # Optimizador de código intermedio
@@ -153,6 +168,7 @@ class Optimizador:
         
                 except (ZeroDivisionError, ValueError) as e: # Especifico estos tipos de excepciones por las moscas, así evitamos que se cuelen otros errores no contemplados
                     nuevo_codigo.append(linea) # Si hay algún error (ej: división por cero), no optimizamos esta línea
+                    print(f"ERROR: {e}. No se puede optimizar la línea '{linea}'")
                     continue 
 
             # --- Unaria constante (t0 = !5) ---
@@ -177,11 +193,130 @@ class Optimizador:
         return hubo_cambios
 
     # ---------------- Propagación de copia ----------------
-    # Se eliminan temporales intermedias cuando es seguro
+    # Si a una variable se le asigna un valor constante, se sustituyen las apariciones posteriores de ella por el valor correspondiente, siempre que no cambie en el camino
+    # Ej: a = 10 
+    #     b = a + 5 -> b = 10 + 5
     def propagacion_copia(self):
-        pass
+        """
+        Propagación lineal adelante:
+        - Propaga constantes: dest = NUM
+        - Propaga copias simples: dest = src  
+        - Propaga copias complejas: dest = op1 op op2  tratando de sustituir op1/op2 por lo que haya en mapa
+        - NO propaga a través de efectos (call/push/pop/jmp/ifnot/label): al encontrarlos se invalida el mapa.
+        - NO propaga resultados que provengan de post-incremento (detectamos t = v seguido de v = v + 1).
+        - No hace análisis de flujo; sólo recorrido lineal.
+        Retorna True si hubieron cambios.
+        """
+        nuevo_codigo = []
+        hubo_cambios = False
+        constantes = {} # Guardamos pares (var, cte)
+        bloqueados = set() # Conjunto sin duplicados de identificadores con propagación bloqueada
+
+        for linea in self.codigo: 
+            
+            # Filtro de instrucciones con efecto (saltamos)
+            if REGEX_EFECTO.search(linea):
+                constantes.clear()
+                bloqueados.clear()
+                nuevo_codigo.append(linea)
+                continue
+
+            # Filtro de incremento tipo i++ (saltamos)
+            # Se evalúa primero por ser el caso más específico
+            if match := REGEX_INCREMENTO.match(linea):
+                var_incrementada = match.group(1)
+                # Como var_incrementada cambia, tenemos que invalidar cualquier entrada en el diccionario que dependa de var_incrementada
+                limpiar_diccionario(constantes, var_incrementada)
+                # Si la línea anterior fue "t = var_incrementada", tenemos que bloquear 't' para no propagar un error
+                if nuevo_codigo:
+                    if m_previo := REGEX_ASIGNACION_SIMPLE.match(nuevo_codigo[-1]):
+                        destino_prev, origen_prev = m_previo.groups()
+                        if origen_prev == var_incrementada and destino_prev.startswith('t'):
+                            bloqueados.add(destino_prev)
+                    nuevo_codigo.append(linea)
+                    continue
+
+            # Asignación de constante (ID = NUM)
+            if match := REGEX_ASIGNACION_CONSTANTE.match(linea):
+                variable, valor = match.groups()
+                limpiar_diccionario(constantes,variable)
+                constantes[variable] = valor
+                nuevo_codigo.append(linea)
+                continue
+
+            # Asignación simple (ID = ID)
+            if match := REGEX_ASIGNACION_SIMPLE.match(linea):
+                destino, origen = match.groups()
+                limpiar_diccionario(constantes, destino)
+                
+                # Peephole: la instrucción anterior define el origen de la actual
+                if nuevo_codigo:
+                    linea_previa = nuevo_codigo[-1]
+                    if m_previo := re.match(fr'^{re.escape(origen)}\s*=\s*(.*)$', linea_previa):
+                        expresion_previa = m_previo.group(1) # Extraemos el "op1 operando op 2" de var = op1 operando op2
+                        nueva_linea = f"{destino} = {expresion_previa}"
+                        nuevo_codigo.append(nueva_linea)
+
+                        print(f"Propagación: {linea_previa} + {linea} -> {nueva_linea}")
+                        hubo_cambios = True
+                        continue
+                
+                # Propagación de copia normal
+                if origen in constantes and origen not in bloqueados:
+                    nueva_linea = f"{destino} = {constantes[origen]}"
+                    print(f"Propagación: {linea} -> {nueva_linea}")
+                    nuevo_codigo.append(nueva_linea)
+                    hubo_cambios = True
+                    continue
+
+                nuevo_codigo.append(linea)
+                continue
+
+            # Asignación binaria (ID = op1 operador op2)
+            if match := REGEX_ASIGNACION_BINARIA.match(linea):
+                destino, op1, operador, op2 = match.groups()
+                limpiar_diccionario(constantes, destino)
+
+                # Tenemos que sustituir los operando si están en el mapa y NO están bloqueados
+                # Operando 1
+                if op1 in constantes and op1 not in bloqueados:
+                    op1_cambiado = constantes[op1]
+                else:
+                    op1_cambiado = op1
+                # Operando 2
+                if op2 in constantes and op2 not in bloqueados:
+                    op2_cambiado = constantes[op2]
+                else:
+                    op2_cambiado = op2
+
+                nueva_linea = f"{destino} = {op1_cambiado} {operador} {op2_cambiado}"
+                if nueva_linea != linea:
+                    hubo_cambios = True
+                    print(f"Propagación: {linea} -> {nueva_linea}")
+                nuevo_codigo.append(nueva_linea)
+                continue
+            
+            # No es nada de lo anterior (poco probable, pero por las moscas)
+            nuevo_codigo.append(linea)
+
+        self.codigo = nuevo_codigo
+        return hubo_cambios
 
     # ---------------- Eliminación de código muerto ----------------
     # Se eliminan instrucciones que no afectan el resultado del programa, como asignaciones a variables que nunca se usan
     def eliminacion_codigo_muerto(self):
         pass
+
+# ###########################################################################
+# Utilidades
+# ###########################################################################
+
+def limpiar_diccionario(mapa, clave_eliminada):
+    """Recibe un mapa y una clave. Elimina dicha clave y todas las demás cuyo valor dependa de la clave eliminada."""
+
+    if clave_eliminada in mapa:
+        del mapa[clave_eliminada]
+
+    claves_a_borrar = [k for k,v in mapa.items() if re.search(fr'\b{re.escape(clave_eliminada)}\b', v)] # re.escape() sirve para neutralizar los caracteres especiales y hacer que la regex los busque como texto literal
+    for k in claves_a_borrar:
+        del mapa[k]

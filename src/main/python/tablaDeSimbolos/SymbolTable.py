@@ -70,7 +70,7 @@ class TS:
 
             simbolos = contexto.simbolos
             if not simbolos:
-                f.write(f"{prefijo}(vacío)\n")
+                f.write(f"{prefijo}(vacio)\n")
                 continue # Salta al siguiente contexto
 
             # Cabecera de impresión

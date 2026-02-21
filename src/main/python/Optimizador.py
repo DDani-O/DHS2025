@@ -5,6 +5,7 @@ import re
 # ###########################################################################
 
 ID = r'[a-zA-Z_][a-zA-Z0-9_]*' # Identificadores (variables, temporales, etiquetas)
+TEMPORAL = r't\d+' # Temporales (t seguidos de un número)
 NUM = r'-?\d+(?:\.\d+)?' # Números enteros o decimales, con opcional signo negativo
 OP_BIN = r'==|!=|>=|<=|&&|\|\||[+\-*/%<>]' # Operadores binarios (comparación, lógica, aritmética)
 OP_UNARIO = r'!' # Operadores unarios
@@ -44,6 +45,10 @@ REGEX_ASIGNACION_SIMPLE = re.compile(fr'^({ID})\s*=\s*({ID})$')
 REGEX_ASIGNACION_BINARIA = re.compile(fr'^({ID})\s*=\s*({ID}|{NUM})\s*({OP_BIN})\s*({ID}|{NUM})$')
 # Grupos = (destino, op1, operador, op2)
 # Grupos = ({ID} , {ID}|{NUM} , {OP_BIN} , {ID}|{NUM})
+
+REGEX_ASIGNACION = re.compile(fr'^({ID})\s*=\s*(.+)$')
+# Grupos = (destino, expresión)
+# Grupos = ({ID}, {cualquier cosa}), lo demás se descarta
 
 # ###########################################################################
 # Optimizador de código intermedio
@@ -214,14 +219,14 @@ class Optimizador:
 
         for linea in self.codigo: 
             
-            # Filtro de instrucciones con efecto (saltamos)
+            # 1) Filtro de instrucciones con efecto (saltamos)
             if REGEX_EFECTO.search(linea):
                 constantes.clear()
                 bloqueados.clear()
                 nuevo_codigo.append(linea)
                 continue
 
-            # Filtro de incremento tipo i++ (saltamos)
+            # 2) Filtro de incremento tipo i++ (saltamos)
             # Se evalúa primero por ser el caso más específico
             if match := REGEX_INCREMENTO.match(linea):
                 var_incrementada = match.group(1)
@@ -236,7 +241,7 @@ class Optimizador:
                     nuevo_codigo.append(linea)
                     continue
 
-            # Asignación de constante (ID = NUM)
+            # 3) Asignación de constante (ID = NUM)
             if match := REGEX_ASIGNACION_CONSTANTE.match(linea):
                 variable, valor = match.groups()
                 limpiar_diccionario(constantes,variable)
@@ -244,7 +249,7 @@ class Optimizador:
                 nuevo_codigo.append(linea)
                 continue
 
-            # Asignación simple (ID = ID)
+            # 4) Asignación simple (ID = ID)
             if match := REGEX_ASIGNACION_SIMPLE.match(linea):
                 destino, origen = match.groups()
                 limpiar_diccionario(constantes, destino)
@@ -252,27 +257,26 @@ class Optimizador:
                 # Peephole: la instrucción anterior define el origen de la actual
                 if nuevo_codigo:
                     linea_previa = nuevo_codigo[-1]
-                    if m_previo := re.match(fr'^{re.escape(origen)}\s*=\s*(.*)$', linea_previa):
+                    if m_previo := re.match(fr'^{re.escape(origen)}\s*=\s*(.*)$', linea_previa): # (.*) == "cualquier cosa"
                         expresion_previa = m_previo.group(1) # Extraemos el "op1 operando op 2" de var = op1 operando op2
                         nueva_linea = f"{destino} = {expresion_previa}"
-                        nuevo_codigo.append(nueva_linea)
-
-                        print(f"Propagación: {linea_previa} + {linea} -> {nueva_linea}")
                         hubo_cambios = True
+                        print(f"Propagación: '{linea_previa}' + '{linea}' -> '{nueva_linea}'")
+                        nuevo_codigo.append(nueva_linea)
                         continue
                 
                 # Propagación de copia normal
                 if origen in constantes and origen not in bloqueados:
                     nueva_linea = f"{destino} = {constantes[origen]}"
-                    print(f"Propagación: {linea} -> {nueva_linea}")
-                    nuevo_codigo.append(nueva_linea)
                     hubo_cambios = True
+                    print(f"Propagación: '{linea}' -> '{nueva_linea}'")
+                    nuevo_codigo.append(nueva_linea)
                     continue
 
                 nuevo_codigo.append(linea)
                 continue
 
-            # Asignación binaria (ID = op1 operador op2)
+            # 5) Asignación binaria (ID = op1 operador op2)
             if match := REGEX_ASIGNACION_BINARIA.match(linea):
                 destino, op1, operador, op2 = match.groups()
                 limpiar_diccionario(constantes, destino)
@@ -292,11 +296,11 @@ class Optimizador:
                 nueva_linea = f"{destino} = {op1_cambiado} {operador} {op2_cambiado}"
                 if nueva_linea != linea:
                     hubo_cambios = True
-                    print(f"Propagación: {linea} -> {nueva_linea}")
+                    print(f"Propagación: '{linea}' -> '{nueva_linea}'")
                 nuevo_codigo.append(nueva_linea)
                 continue
             
-            # No es nada de lo anterior (poco probable, pero por las moscas)
+            # 6) No es nada de lo anterior (poco probable, pero por las moscas)
             nuevo_codigo.append(linea)
 
         self.codigo = nuevo_codigo
@@ -305,7 +309,38 @@ class Optimizador:
     # ---------------- Eliminación de código muerto ----------------
     # Se eliminan instrucciones que no afectan el resultado del programa, como asignaciones a variables que nunca se usan
     def eliminacion_codigo_muerto(self):
-        pass
+        """Elimina el código muerto en dos pasadas: la primera para contar los usos de cada variable, y la segunda para eliminar las asignaciones a temporales que no se usan."""
+
+        usos = {} # Variable -> Cantidad de usos
+        nuevo_codigo = []
+        hubo_cambios = False
+
+        # Primera pasada: contamos los usos de cada variable
+        for linea in self.codigo:
+            # Buscamos todas las apariciones de identificadores en la línea (tanto variables como temporales)
+            for match in re.finditer(ID, linea): # finditer() devuelve un iterador de objetos Match para cada ocurrencia del patrón en la línea, sin ocupar memoria extra para almacenar todos los matches a la vez (como hace findall(), que además devuelve sólo texto, no objetos Match)
+                var = match.group(0) # El grupo 0 corresponde al match completo
+                if var not in usos:
+                    usos[var] = 0
+                usos[var] += 1
+            # NOTA: Esto cuenta también las apariciones de variables en el lado izquierdo de las asignaciones (y, en realidad, las apariciones de palabras reservadas tmb), pero no es un gran problema porque al final lo que nos interesa es eliminar variables que no se usan en absoluto, y si una variable sólo aparece en el lado izquierdo de una asignación, su conteo de usos será 1.
+
+        # Segunda pasada: eliminamos las asignaciones a temporales que no se usan
+        for linea in self.codigo:
+            if match := REGEX_ASIGNACION.match(linea):
+                destino = match.group(1)
+                if re.fullmatch(TEMPORAL, destino) and usos.get(destino, 0) == 1: # Si la variable sólo aparece en el lado izquierdo de una asignación, su conteo de usos es 1
+                # .get evita que explote en caso que no exista la clave en el diccionario, devolviendo 0 por defecto (no debería ocurrir, pero por las moscas)
+                    hubo_cambios = True
+                    print(f"Eliminación de código muerto: '{linea}' eliminado porque '{destino}' no se usa.")
+                    continue # No agregamos esta línea al nuevo código
+
+            # Si no se cumple la condición anterior, mantenemos la línea original
+            nuevo_codigo.append(linea)
+        
+        # Fin del recorrido
+        self.codigo = nuevo_codigo
+        return hubo_cambios
 
 # ###########################################################################
 # Utilidades

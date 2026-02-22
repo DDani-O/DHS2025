@@ -150,13 +150,25 @@ class Escucha(compiladorListener):
         self.tipoADeclarar = CType.fromStr(ctx.parentCtx.tipo().getText())
 
     def exitDeclarador(self, ctx: compiladorParser.DeclaradorContext):
-        nombre_variable = ctx.ID().getText()
+        if ctx.ID() is None:
+            return
+
+        token = ctx.ID().getSymbol()
+        nombre_variable = token.text
+
+        # Ignorar IDs generados por recuperación de errores
+        if nombre_variable.startswith("<missing"):
+            return
+
         if self.ts.buscarSimboloContexto(nombre_variable):
             self.registrarError(TipoError.SEMANTICO, f"La variable '{nombre_variable}' ya fue declarada en este contexto.", ctx)
             return
+
         nueva_variable = Variable(nombre_variable, self.tipoADeclarar)
+
         if ctx.inic().getChildCount() > 0:
             nueva_variable.setInicializado()
+
         self.ts.addSimbolo(nueva_variable)
 
     def cargarParametrosFuncion(self, ctx: compiladorParser.FuncionContext):

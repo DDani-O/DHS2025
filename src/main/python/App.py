@@ -18,8 +18,8 @@ def main(argv):
     # Entradas de testing
     # archivo = "input/testerFunciones.txt"
     # archivo = "input/testerErroresSintacticos.txt"
-    # archivo = "input/entradaSimple.txt"
-    archivo = "input/entradaCorrecta.txt"
+    archivo = "input/entradaSimple.txt"
+    # archivo = "input/entradaCorrecta.txt"
     # archivo = "input/entradaConErrores.txt"
 
     if len(argv) > 1 :

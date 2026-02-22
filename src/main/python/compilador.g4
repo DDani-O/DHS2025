@@ -5,12 +5,14 @@ fragment DIGITO : [0-9] ;
 
 
 // ======= Definición de símbolos =======
+// Caracteres de agrupación
 PA : '(' ;
 PC : ')' ;
 LLA : '{' ;
 LLC : '}' ;
 PYC : ';' ;
 
+// Operadores lógicos
 IGUAL    : '==' ;
 DISTINTO :'!=' ;
 MAYOR    : '>' ;
@@ -21,6 +23,7 @@ AND      : '&&' ;
 OR       : '||' ;
 NOT      : '!' ;
 
+// Operadores aritméticos
 ASIG : '=' ;
 COMA : ',' ;
 SUMA : '+' ;
@@ -31,14 +34,15 @@ MULT : '*' ;
 DIV : '/' ;
 MOD : '%' ;
 
-NUMERO : DIGITO+ ;
-
 // Palabras reservadas
+// Tipos de datos
 INT : 'int' ;
-DOUBLE : 'double' ;
+FLOAT : 'float' ;
 CHAR : 'char' ;
+BOOL : 'bool' ;
 VOID : 'void' ;
 
+// Estructuras de control
 IF :    'if' ;
 ELSE :  'else' ;
 FOR :   'for' ;
@@ -46,20 +50,20 @@ WHILE : 'while' ;
 
 RETURN : 'return' ;
 
+// Otros
+
+CARACTER : '\'' LETRA '\'' ;
+
+NUMERO : ENTERO
+       | DECIMAL
+       ;
+ENTERO : DIGITO+ ;
+DECIMAL : DIGITO+ '.' DIGITO+ ;
+
 ID : (LETRA | '_')(LETRA | DIGITO | '_')* ;
 
 WS : [ \n\r\t] -> skip ;
 OTRO : . ;
-
-// s : ID     {print("ID ->" + $ID.text + "<--") }         s
-//   | NUMERO {print("NUMERO ->" + $NUMERO.text + "<--") } s
-//   | OTRO   {print("Otro ->" + $OTRO.text + "<--") }     s
-//   | EOF
-//   ;
-
-// s : PA s PC s
-//   |
-//   ;
 
 // ======= Estructura básica =======
 
@@ -86,15 +90,20 @@ bloque : LLA instrucciones LLC ;
 // ======= Funciones =======
 
 // Prototipado
-prototipo : tipo ID PA listParamsProt? PC PYC ; // el '?' significa "0 o 1 veces"
-listParamsProt : parametroProt (COMA parametroProt)*;
+prototipo : tipo ID PA listParamsProt PC PYC ;
+listParamsProt : parametroProt (COMA parametroProt)*
+               |
+               ;
 parametroProt : tipo
               | tipo ID // en los prototipos, el nombre es opcional
               ;
 
 // Definición
-funcion : tipo ID PA listParamsDef? PC bloque ;
-listParamsDef : parametroDef (COMA parametroDef)* ;
+funcion : tipo ID PA listParamsDef PC bloque ; 
+listParamsDef : parametroDef (COMA parametroDef)*
+              | VOID
+              |
+              ;
 parametroDef : tipo ID; // en una definición, el nombre es obligatorio
 
 ireturn : RETURN opal PYC 
@@ -102,8 +111,10 @@ ireturn : RETURN opal PYC
         ;
 
 // Llamada
-llamadaFunc : ID PA listArgs? PC ;
-listArgs : opal (COMA opal)* ; // las llamadas a funciones están presentes como factores en las operaciones
+llamadaFunc : ID PA listArgs PC ;
+listArgs : opal (COMA opal)*
+         |
+         ;
 
 // ======= Instrucciones de control =======
 
@@ -140,18 +151,16 @@ listStep : COMA step
 // ======= Declaraciones y asignación de variables =======
 
 declaracion : expDEC PYC ;
-expDEC: tipo ID inic listavar ;
+expDEC : tipo listaDeclaradores ;
 tipo : INT
-     | DOUBLE
+     | FLOAT
      | CHAR
+     | BOOL
      | VOID
      ;
-
-listavar : COMA ID inic listavar 
-         |
-         ;
-
-inic : ASIG opal 
+listaDeclaradores : declarador (COMA declarador)* ;
+declarador : ID inic ;
+inic : ASIG opal
      |
      ;
 
@@ -210,10 +219,14 @@ t : MULT factor t
   |
   ;
 
-factor : (NOT | INC | DEC)? factorSufix; 
+// Los factores pueden estar acompañados de operaciones unarias
+factor : (NOT | INC | DEC)? factorSufix; // Los postfijos tienen mayor precedencia que los prefijos
 factorSufix : factorCore (INC | DEC)? ;
 factorCore : NUMERO
+           | CARACTER
            | ID
            | PA exp PC
            | llamadaFunc
            ;
+/* Esta definción permite construcciones inválidas, pero sigue la lógica de la ISO de C11.
+Aparentemente la mayoría de restricciones se aplican durante el análisis semántico. */

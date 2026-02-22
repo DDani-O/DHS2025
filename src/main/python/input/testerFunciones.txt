@@ -1,0 +1,32 @@
+int f(int a, char b);
+
+int g(int x);
+
+int f(int a, char b) {
+    int x;
+    y = 3;              
+    int x;              
+    int z = x + y;      
+    return b;           
+}
+
+int g(int x) {
+    return 3.14;        
+}
+
+int h(int x) {
+    return x;
+}
+
+int main() {
+    int a;
+    f(a, 2);            
+    f(a);               
+    k();                
+    g(a);               
+    return 0;
+}
+
+int z(int x) {
+    return x;
+}

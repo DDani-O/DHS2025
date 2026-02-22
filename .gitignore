@@ -5,3 +5,5 @@ compilador*
 .antlr
 target
 ContenidoTS.txt
+CodigoIntermedio.txt
+CodigoOptimizado.txt

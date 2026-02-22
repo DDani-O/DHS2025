@@ -1,5 +1,7 @@
+from Enumeraciones import CType
+
 class ID:
-    def __init__(self, nombre: str, tipoDato: str):
+    def __init__(self, nombre: str, tipoDato: CType):
         self.nombre = nombre
         self.tipoDato = tipoDato
         self.inicializado = False
@@ -8,7 +10,7 @@ class ID:
     def getNombre(self) -> str:
         return self.nombre
 
-    def getTipoDato(self) -> str:
+    def getTipoDato(self) -> CType:
         return self.tipoDato
 
     def getInicializado(self) -> bool:

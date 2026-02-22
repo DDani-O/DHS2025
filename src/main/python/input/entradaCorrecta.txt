@@ -1,7 +1,33 @@
-int x = 0, y = 0, z = 0;
+int suma(int a, int);
 
-x = y + z;
+int suma(int a, int b) {
+    int c = a + b;
+    return c;
+}
 
-if(x < 10){
-    for(int i = 0)
+float division(float, float);
+
+float multiplicacion(int a, int b){
+    float c = a * b;
+    return c;
+}
+
+int main() {
+    int x = 10, y = x, z = suma(x, y);
+    int w = 3;
+    float producto = 0;
+
+    for(int i = 0; i < 10; i++){
+        producto = multiplicacion(i, w++);
+    }
+    if(producto != 0){
+        z = division(producto, 1.25);
+    }
+
+    return z;
+}
+
+float division(float a, float b){
+    float c = a / b;
+    return c;
 }
